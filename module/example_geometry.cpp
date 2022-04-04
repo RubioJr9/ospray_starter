@@ -31,15 +31,21 @@ namespace example {
         }
         radius = getParam<float>("radius", 0.01f);
         vertexData = getParamDataT<vec3f>("sphere.position", true);
+        radiiData = getParamDataT<vec3f>("sphere.radii");
         radiusData = getParamDataT<float>("sphere.radius");
         texcoordData = getParamDataT<vec2f>("sphere.texcoord");
+        eigvec1Data = getParamDataT<vec3f>("sphere.eigvec1");
+        eigvec2Data = getParamDataT<vec3f>("sphere.eigvec2");
 
         ispc::ExampleSpheres_set(getIE(),
                                  embreeGeometry,
                                  ispc(vertexData),
+                                 ispc(radiiData),
                                  ispc(radiusData),
                                  ispc(texcoordData),
-                                 radius);
+                                 radius,
+                                 ispc(eigvec1Data),
+                                 ispc(eigvec2Data));
 
         postCreationInfo();
     }

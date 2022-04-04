@@ -1,0 +1,34 @@
+// Copyright 2009-2021 Intel Corporation
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+
+#include "rkcommon/math/vec.ih"
+#include "math/AffineSpace.ih"
+
+inline Intersections intersectEllipsoid(const vec3f &rayOrg,
+    const vec3f &rayDir,
+    const uniform vec3f &center,
+    const uniform vec3f &eigvals,
+    const uniform vec3f &eigvec1,
+    const uniform vec3f &eigvec2)
+{
+  Intersections isect;
+  isect.entry.hit = false;
+  isect.exit.hit = false;
+  isect.entry.t = inf;
+  isect.exit.t = -inf;
+
+  const uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
+  const uniform vec3f scaled_eigvec1 = eigvals.x * eigvec1;
+  const uniform vec3f scaled_eigvec2 = eigvals.y * eigvec2;
+  const uniform vec3f scaled_eigvec3 = eigvals.z * eigvec3;
+  uniform affine3f basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center);
+  uniform affine3f inv = rcp(basis);
+
+  vec3f cRayOrg = xfmPoint(inv, rayOrg);
+  vec3f cRayDir = xfmVector(inv, rayDir);
+
+  isect = intersectSphere(cRayOrg, cRayDir, make_vec3f(0,0,0), 1);
+  return isect;
+}

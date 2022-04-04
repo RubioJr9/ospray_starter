@@ -20,8 +20,11 @@ namespace example {
     protected:
         float radius{0.01};  // default radius, if no per-sphere radius
         Ref<const DataT<vec3f>> vertexData;
+        Ref<const DataT<vec3f>> radiiData;
         Ref<const DataT<float>> radiusData;
         Ref<const DataT<vec2f>> texcoordData;
+        Ref<const DataT<vec3f>> eigvec1Data;
+        Ref<const DataT<vec3f>> eigvec2Data;
     };
 
 }

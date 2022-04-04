@@ -5,6 +5,7 @@
 #include "common/Data.ih"
 #include "common/FilterIntersect.ih"
 #include "common/ISPCMessages.h"
+#include "EllipsoidIntersect.ih"
 #include "common/Intersect.ih"
 #include "common/Ray.ih"
 #include "common/World.ih"
@@ -16,9 +17,12 @@
 struct ExampleSpheres {
     Geometry super;
     Data1D vertex;
+    Data1D radii;
     Data1D radius;
     Data1D texcoord;
     float global_radius;
+    Data1D eigvec1;
+    Data1D eigvec2;
 };
 
 static void ExampleSpheres_postIntersect(const Geometry *uniform geometry,
@@ -46,11 +50,31 @@ unmasked void ExampleSpheres_bounds(const RTCBoundsFunctionArguments *uniform ar
 {
     ExampleSpheres *uniform self = (ExampleSpheres * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
-    uniform float radius =
-        valid(self->radius) ? get_float(self->radius, primID) : self->global_radius;
+    uniform vec3f radii = get_vec3f(self->radii, primID);
+    uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
+    uniform vec3f eigvec2 = get_vec3f(self->eigvec2, primID);
+    uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
+    uniform vec3f scaled_eigvec1 = radii.x * eigvec1;
+    uniform vec3f scaled_eigvec2 = radii.y * eigvec2;
+    uniform vec3f scaled_eigvec3 = radii.z * eigvec3;
     uniform vec3f center = get_vec3f(self->vertex, primID);
+
+    uniform vec3f min = make_vec3f(0,0,0);
+    uniform vec3f max = make_vec3f(0,0,0);
+    for (uniform int x_sign = -1; x_sign <= 1; x_sign+=2)
+        for (uniform int y_sign = -1; y_sign <= 1; y_sign+=2)
+            for (uniform int z_sign = -1; z_sign <= 1; z_sign+=2) {
+                uniform vec3f offset = x_sign*scaled_eigvec1 + y_sign*scaled_eigvec2 + z_sign*scaled_eigvec3;
+                if (offset.x < min.x) min.x = offset.x;
+                else if (offset.x > max.x) max.x = offset.x;
+                if (offset.y < min.y) min.y = offset.y;
+                else if (offset.y > max.y) max.y = offset.y;
+                if (offset.z < min.z) min.z = offset.z;
+                else if (offset.z > max.z) max.z = offset.z;
+            }
+
     box3fa *uniform out = (box3fa * uniform) args->bounds_o;
-    *out = make_box3fa(center - radius, center + radius);
+    *out = make_box3fa(center + min, center + max);
 }
 
 void ExampleSpheres_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
@@ -66,11 +90,12 @@ void ExampleSpheres_intersect_kernel(const RTCIntersectFunctionNArguments *unifo
     // this assumes that the args->rayhit is actually a pointer to a varying ray!
     varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-    uniform float radius =
-        valid(self->radius) ? get_float(self->radius, primID) : self->global_radius;
+    uniform vec3f radii = get_vec3f(self->radii, primID);
     uniform vec3f center = get_vec3f(self->vertex, primID);
+    uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
+    uniform vec3f eigvec2 = get_vec3f(self->eigvec2, primID);
 
-    const Intersections isect = intersectSphere(ray->org, ray->dir, center, radius);
+    const Intersections isect = intersectEllipsoid(ray->org, ray->dir, center, radii, eigvec1, eigvec2);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);
@@ -161,17 +186,23 @@ export void *uniform ExampleSpheres_create()
 export void ExampleSpheres_set(void *uniform _self,
                                void *uniform _embreeGeometry,
                                const Data1D *uniform vertex,
+                               const Data1D *uniform radii,
                                const Data1D *uniform radius,
                                const Data1D *uniform texcoord,
-                               uniform float global_radius)
+                               uniform float global_radius,
+                               const Data1D *uniform eigvec1,
+                               const Data1D *uniform eigvec2)
 {
     ExampleSpheres *uniform self = (ExampleSpheres * uniform) _self;
 
     self->vertex = *vertex;
     self->radius = *radius;
+    self->radii = *radii;
     self->texcoord = *texcoord;
     self->global_radius = global_radius;
     self->super.numPrimitives = vertex->numItems;
+    self->eigvec1 = *eigvec1;
+    self->eigvec2 = *eigvec2;
 
     Geometry_setEmbreeUserGeometry(&self->super,
                                    (RTCGeometry)_embreeGeometry,

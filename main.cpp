@@ -197,6 +197,20 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     cpp::Geometry mesh("example_spheres");
     mesh.setParam("sphere.position", cpp::CopiedData(positions));
     mesh.setParam("radius", 0.5f);
+    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.25f, 0.25f),
+                                    glm::vec3(1.0f, 0.4f, 0.25f),
+                                    glm::vec3(0.5f, 0.5f, 0.1f)};
+    std::vector<glm::vec3> eigvec1 = {glm::vec3(0.88232f, 0.270515f, -0.385141f),
+                                      glm::vec3(0.671044f, 0.514783f, -0.533571f),
+                                      glm::vec3(0.544639f, 0.393851f, -0.740439f)};
+    std::vector<glm::vec3> eigvec2 = {glm::vec3(-0.194475f, 0.954738f, 0.225065f),
+                                      glm::vec3(-0.154719f, 0.801048f, 0.578259f),
+                                      glm::vec3(-0.393851f, 0.899576f, 0.188796f)};
+    mesh.setParam("sphere.radii", cpp::CopiedData(radii));
+    mesh.commit();
+
+    mesh.setParam("sphere.eigvec1", cpp::CopiedData(eigvec1));
+    mesh.setParam("sphere.eigvec2", cpp::CopiedData(eigvec2));
     mesh.commit();
 
     // put the mesh into a model
