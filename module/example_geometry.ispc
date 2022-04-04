@@ -14,7 +14,7 @@
 #include "rkcommon/math/box.ih"
 #include "rkcommon/math/vec.ih"
 
-struct ExampleSpheres {
+struct ExampleEllipsoids {
     Geometry super;
     Data1D vertex;
     Data1D radii;
@@ -25,12 +25,12 @@ struct ExampleSpheres {
     Data1D eigvec2;
 };
 
-static void ExampleSpheres_postIntersect(const Geometry *uniform geometry,
+static void ExampleEllipsoids_postIntersect(const Geometry *uniform geometry,
                                          varying DifferentialGeometry &dg,
                                          const varying Ray &ray,
                                          uniform int64 flags)
 {
-    ExampleSpheres *uniform self = (ExampleSpheres * uniform) geometry;
+    ExampleEllipsoids *uniform self = (ExampleEllipsoids * uniform) geometry;
 
     dg.Ng = dg.Ns = ray.Ng;
 
@@ -46,9 +46,9 @@ static void ExampleSpheres_postIntersect(const Geometry *uniform geometry,
         dg.st = get_vec2f(self->texcoord, ray.primID);
 }
 
-unmasked void ExampleSpheres_bounds(const RTCBoundsFunctionArguments *uniform args)
+unmasked void ExampleEllipsoids_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
-    ExampleSpheres *uniform self = (ExampleSpheres * uniform) args->geometryUserPtr;
+    ExampleEllipsoids *uniform self = (ExampleEllipsoids * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
     uniform vec3f radii = get_vec3f(self->radii, primID);
     uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
@@ -77,14 +77,14 @@ unmasked void ExampleSpheres_bounds(const RTCBoundsFunctionArguments *uniform ar
     *out = make_box3fa(center + min, center + max);
 }
 
-void ExampleSpheres_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
+void ExampleEllipsoids_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
                                      const uniform bool isOcclusionTest)
 {
     // make sure to set the mask
     if (!args->valid[programIndex])
         return;
 
-    ExampleSpheres *uniform self = (ExampleSpheres * uniform) args->geometryUserPtr;
+    ExampleEllipsoids *uniform self = (ExampleEllipsoids * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
 
     // this assumes that the args->rayhit is actually a pointer to a varying ray!
@@ -101,25 +101,25 @@ void ExampleSpheres_intersect_kernel(const RTCIntersectFunctionNArguments *unifo
     filterIntersectionBoth(args, isect, isOcclusionTest);
 }
 
-unmasked void ExampleSpheres_intersect(
+unmasked void ExampleEllipsoids_intersect(
     const struct RTCIntersectFunctionNArguments *uniform args)
 {
-    ExampleSpheres_intersect_kernel(args, false);
+    ExampleEllipsoids_intersect_kernel(args, false);
 }
 
-unmasked void ExampleSpheres_occluded(const struct RTCOccludedFunctionNArguments *uniform args)
+unmasked void ExampleEllipsoids_occluded(const struct RTCOccludedFunctionNArguments *uniform args)
 {
-    ExampleSpheres_intersect_kernel((RTCIntersectFunctionNArguments *)args, true);
+    ExampleEllipsoids_intersect_kernel((RTCIntersectFunctionNArguments *)args, true);
 }
 
-SampleAreaRes ExampleSpheres_sampleArea(const Geometry *uniform const _self,
+SampleAreaRes ExampleEllipsoids_sampleArea(const Geometry *uniform const _self,
                                         const int32 primID,
                                         const uniform affine3f &xfm,
                                         const uniform affine3f &rcp_xfm,
                                         const vec2f &s,
                                         const float)
 {
-    const ExampleSpheres *const uniform self = (const ExampleSpheres *uniform)_self;
+    const ExampleEllipsoids *const uniform self = (const ExampleEllipsoids *uniform)_self;
 
     float radius = self->global_radius;
     if (valid(self->radius))
@@ -135,13 +135,13 @@ SampleAreaRes ExampleSpheres_sampleArea(const Geometry *uniform const _self,
     return res;
 }
 
-void ExampleSpheres_getAreas(const Geometry *const uniform _self,
+void ExampleEllipsoids_getAreas(const Geometry *const uniform _self,
                              const int32 *const uniform primIDs,
                              const uniform int32 numPrims,
                              const uniform affine3f &xfm,
                              float *const uniform areas)
 {
-    ExampleSpheres *uniform self = (ExampleSpheres * uniform) _self;
+    ExampleEllipsoids *uniform self = (ExampleEllipsoids * uniform) _self;
 
     // detect (non-uniform) scaling; get length of transformed unit-vectors
     const uniform vec3f scaling3 =
@@ -165,25 +165,25 @@ void ExampleSpheres_getAreas(const Geometry *const uniform _self,
     }
 }
 
-void ExampleSpheres_Constructor(ExampleSpheres *uniform self)
+void ExampleEllipsoids_Constructor(ExampleEllipsoids *uniform self)
 {
-    Geometry_Constructor(&self->super, ExampleSpheres_postIntersect);
-    self->super.getAreas = ExampleSpheres_getAreas;
-    self->super.sampleArea = ExampleSpheres_sampleArea;
+    Geometry_Constructor(&self->super, ExampleEllipsoids_postIntersect);
+    self->super.getAreas = ExampleEllipsoids_getAreas;
+    self->super.sampleArea = ExampleEllipsoids_sampleArea;
     Data1D_Constructor(&self->vertex);
     Data1D_Constructor(&self->radius);
     Data1D_Constructor(&self->texcoord);
     self->global_radius = 0.01;
 }
 
-export void *uniform ExampleSpheres_create()
+export void *uniform ExampleEllipsoids_create()
 {
-    ExampleSpheres *uniform self = uniform new ExampleSpheres;
-    ExampleSpheres_Constructor(self);
+    ExampleEllipsoids *uniform self = uniform new ExampleEllipsoids;
+    ExampleEllipsoids_Constructor(self);
     return self;
 }
 
-export void ExampleSpheres_set(void *uniform _self,
+export void ExampleEllipsoids_set(void *uniform _self,
                                void *uniform _embreeGeometry,
                                const Data1D *uniform vertex,
                                const Data1D *uniform radii,
@@ -193,7 +193,7 @@ export void ExampleSpheres_set(void *uniform _self,
                                const Data1D *uniform eigvec1,
                                const Data1D *uniform eigvec2)
 {
-    ExampleSpheres *uniform self = (ExampleSpheres * uniform) _self;
+    ExampleEllipsoids *uniform self = (ExampleEllipsoids * uniform) _self;
 
     self->vertex = *vertex;
     self->radius = *radius;
@@ -206,7 +206,7 @@ export void ExampleSpheres_set(void *uniform _self,
 
     Geometry_setEmbreeUserGeometry(&self->super,
                                    (RTCGeometry)_embreeGeometry,
-                                   ExampleSpheres_bounds,
-                                   ExampleSpheres_intersect,
-                                   ExampleSpheres_occluded);
+                                   ExampleEllipsoids_bounds,
+                                   ExampleEllipsoids_intersect,
+                                   ExampleEllipsoids_occluded);
 }

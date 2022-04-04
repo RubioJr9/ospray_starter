@@ -188,14 +188,14 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));
     renderer.commit();
 
-    // Sphere positions
+    // Ellipsoid positions
     std::vector<glm::vec3> positions = {glm::vec3(-1.0f, -1.0f, 0.0f),
                                         glm::vec3(0.0f, 1.0f, 0.0f),
                                         glm::vec3(1.0f, -1.0f, 0.0f)};
 
     // create and setup our geometry
-    cpp::Geometry mesh("example_spheres");
-    mesh.setParam("sphere.position", cpp::CopiedData(positions));
+    cpp::Geometry mesh("example_ellipsoids");
+    mesh.setParam("ellipsoid.position", cpp::CopiedData(positions));
     mesh.setParam("radius", 0.5f);
     std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.25f, 0.25f),
                                     glm::vec3(1.0f, 0.4f, 0.25f),
@@ -206,11 +206,11 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     std::vector<glm::vec3> eigvec2 = {glm::vec3(-0.194475f, 0.954738f, 0.225065f),
                                       glm::vec3(-0.154719f, 0.801048f, 0.578259f),
                                       glm::vec3(-0.393851f, 0.899576f, 0.188796f)};
-    mesh.setParam("sphere.radii", cpp::CopiedData(radii));
+    mesh.setParam("ellipsoid.radii", cpp::CopiedData(radii));
     mesh.commit();
 
-    mesh.setParam("sphere.eigvec1", cpp::CopiedData(eigvec1));
-    mesh.setParam("sphere.eigvec2", cpp::CopiedData(eigvec2));
+    mesh.setParam("ellipsoid.eigvec1", cpp::CopiedData(eigvec1));
+    mesh.setParam("ellipsoid.eigvec2", cpp::CopiedData(eigvec2));
     mesh.commit();
 
     // put the mesh into a model

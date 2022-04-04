@@ -9,6 +9,6 @@ extern "C" OSPError OSPRAY_DLLEXPORT ospray_module_init_example(int16_t versionM
                                                                 int16_t versionMinor,
                                                                 int16_t /*versionPatch*/)
 {
-    Geometry::registerType<example::ExampleSpheres>("example_spheres");
+    Geometry::registerType<example::ExampleEllipsoids>("example_ellipsoids");
     return OSP_NO_ERROR;
 }

@@ -8,8 +8,8 @@
 namespace ospray {
 namespace example {
 
-    struct OSPRAY_SDK_INTERFACE ExampleSpheres : public Geometry {
-        ExampleSpheres();
+    struct OSPRAY_SDK_INTERFACE ExampleEllipsoids : public Geometry {
+        ExampleEllipsoids();
 
         virtual std::string toString() const override;
 

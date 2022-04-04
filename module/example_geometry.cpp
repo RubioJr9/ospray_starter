@@ -11,17 +11,17 @@
 namespace ospray {
 namespace example {
 
-    ExampleSpheres::ExampleSpheres()
+    ExampleEllipsoids::ExampleEllipsoids()
     {
-        ispcEquivalent = ispc::ExampleSpheres_create();
+        ispcEquivalent = ispc::ExampleEllipsoids_create();
     }
 
-    std::string ExampleSpheres::toString() const
+    std::string ExampleEllipsoids::toString() const
     {
-        return "ospray::ExampleSpheres";
+        return "ospray::ExampleEllipsoids";
     }
 
-    void ExampleSpheres::commit()
+    void ExampleEllipsoids::commit()
     {
         if (!embreeDevice) {
             throw std::runtime_error("invalid Embree device");
@@ -30,14 +30,14 @@ namespace example {
             embreeGeometry = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_USER);
         }
         radius = getParam<float>("radius", 0.01f);
-        vertexData = getParamDataT<vec3f>("sphere.position", true);
-        radiiData = getParamDataT<vec3f>("sphere.radii");
-        radiusData = getParamDataT<float>("sphere.radius");
-        texcoordData = getParamDataT<vec2f>("sphere.texcoord");
-        eigvec1Data = getParamDataT<vec3f>("sphere.eigvec1");
-        eigvec2Data = getParamDataT<vec3f>("sphere.eigvec2");
+        vertexData = getParamDataT<vec3f>("ellipsoid.position", true);
+        radiiData = getParamDataT<vec3f>("ellipsoid.radii");
+        radiusData = getParamDataT<float>("ellipsoid.radius");
+        texcoordData = getParamDataT<vec2f>("ellipsoid.texcoord");
+        eigvec1Data = getParamDataT<vec3f>("ellipsoid.eigvec1");
+        eigvec2Data = getParamDataT<vec3f>("ellipsoid.eigvec2");
 
-        ispc::ExampleSpheres_set(getIE(),
+        ispc::ExampleEllipsoids_set(getIE(),
                                  embreeGeometry,
                                  ispc(vertexData),
                                  ispc(radiiData),
@@ -50,7 +50,7 @@ namespace example {
         postCreationInfo();
     }
 
-    size_t ExampleSpheres::numPrimitives() const
+    size_t ExampleEllipsoids::numPrimitives() const
     {
         return vertexData ? vertexData->size() : 0;
     }
