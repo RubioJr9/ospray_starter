@@ -13,6 +13,7 @@
 #include "math/sampling.ih"
 #include "rkcommon/math/box.ih"
 #include "rkcommon/math/vec.ih"
+#include "math/AffineSpace.ih"
 
 struct ExampleEllipsoids {
     Geometry super;
@@ -23,6 +24,8 @@ struct ExampleEllipsoids {
     float global_radius;
     Data1D eigvec1;
     Data1D eigvec2;
+    uniform affine3f basis;
+    uniform affine3f inv_basis;
 };
 
 static void ExampleEllipsoids_postIntersect(const Geometry *uniform geometry,
@@ -40,7 +43,8 @@ static void ExampleEllipsoids_postIntersect(const Geometry *uniform geometry,
 
     // make epsilon large enough to not get lost when computing
     // |CO| = |center-ray.org| ~ radius for 2ndary rays
-    dg.epsilon = radius * ulpEpsilon;
+    vec3f radii = get_vec3f(self->radii, ray.primID);
+    dg.epsilon = radii.x * ulpEpsilon;
 
     if (and(flags & DG_TEXCOORD, valid(self->texcoord)))
         dg.st = get_vec2f(self->texcoord, ray.primID);
@@ -90,12 +94,20 @@ void ExampleEllipsoids_intersect_kernel(const RTCIntersectFunctionNArguments *un
     // this assumes that the args->rayhit is actually a pointer to a varying ray!
     varying Ray *uniform ray = (varying Ray * uniform) args->rayhit;
 
-    uniform vec3f radii = get_vec3f(self->radii, primID);
-    uniform vec3f center = get_vec3f(self->vertex, primID);
-    uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
-    uniform vec3f eigvec2 = get_vec3f(self->eigvec2, primID);
 
-    const Intersections isect = intersectEllipsoid(ray->org, ray->dir, center, radii, eigvec1, eigvec2);
+
+    const uniform vec3f radii = get_vec3f(self->radii, primID);
+    const uniform vec3f center = get_vec3f(self->vertex, primID);
+    const uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
+    const uniform vec3f eigvec2 = get_vec3f(self->eigvec2, primID);
+    const uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
+    const uniform vec3f scaled_eigvec1 = radii.x * eigvec1;
+    const uniform vec3f scaled_eigvec2 = radii.y * eigvec2;
+    const uniform vec3f scaled_eigvec3 = radii.z * eigvec3;
+    self->basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center);
+    self->inv_basis = rcp(self->basis);
+
+    const Intersections isect = intersectEllipsoid(ray->org, ray->dir, center, radii, eigvec1, eigvec2, self->inv_basis);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);
@@ -125,13 +137,15 @@ SampleAreaRes ExampleEllipsoids_sampleArea(const Geometry *uniform const _self,
     if (valid(self->radius))
         radius = get_float(self->radius, primID);
 
-    const vec3f localNormal = uniformSampleSphere(radius, s);
+    const vec3f localNormal = normalize(uniformSampleSphere(radius, s));
     const vec3f localPos = get_vec3f(self->vertex, primID) + localNormal;
+    const vec3f n = make_vec3f(0,0,0);
+    const vec3f p = xfmVector(self->basis, localPos);
 
     SampleAreaRes res;
     res.pos = xfmPoint(xfm, localPos);
+    res.pos = p;
     res.normal = normalize(xfmVector(transposed(rcp_xfm.l), localNormal));
-
     return res;
 }
 

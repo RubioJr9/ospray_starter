@@ -11,7 +11,8 @@ inline Intersections intersectEllipsoid(const vec3f &rayOrg,
     const uniform vec3f &center,
     const uniform vec3f &eigvals,
     const uniform vec3f &eigvec1,
-    const uniform vec3f &eigvec2)
+    const uniform vec3f &eigvec2,
+    const uniform affine3f &i)
 {
   Intersections isect;
   isect.entry.hit = false;
@@ -30,5 +31,7 @@ inline Intersections intersectEllipsoid(const vec3f &rayOrg,
   vec3f cRayDir = xfmVector(inv, rayDir);
 
   isect = intersectSphere(cRayOrg, cRayDir, make_vec3f(0,0,0), 1);
+  isect.entry.N = xfmVector(transposed(inv.l), isect.entry.N);
+  isect.exit.N = xfmVector(transposed(inv.l), isect.exit.N);
   return isect;
 }

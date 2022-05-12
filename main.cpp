@@ -197,7 +197,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     cpp::Geometry mesh("example_ellipsoids");
     mesh.setParam("ellipsoid.position", cpp::CopiedData(positions));
     mesh.setParam("radius", 0.5f);
-    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.25f, 0.25f),
+    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 1.0f, 0.25f),
                                     glm::vec3(1.0f, 0.4f, 0.25f),
                                     glm::vec3(0.5f, 0.5f, 0.1f)};
     std::vector<glm::vec3> eigvec1 = {glm::vec3(0.88232f, 0.270515f, -0.385141f),
@@ -215,6 +215,14 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
 
     // put the mesh into a model
     cpp::GeometricModel model(mesh);
+
+    float ns = 10.0f;
+    glm::vec3 ks = glm::vec3(1.0f, 1.0f, 1.0f);
+    OSPMaterial material = ospNewMaterial("scivis", "obj");
+    ospSetParam(material, "ks", OSP_VEC3F, &ks);
+    ospSetParam(material, "ns", OSP_FLOAT, &ns);
+    ospCommit(material);
+    model.setParam("material", material);
     model.commit();
 
     cpp::Group group;
@@ -225,11 +233,17 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     instance.commit();
 
     cpp::Light light("ambient");
+    light.setParam("intensity", 0.05f);
     light.commit();
 
+    cpp::Light dir_light("distant");
+    dir_light.setParam("direction", glm::vec3(0,0,1));
+    dir_light.commit();
+
     cpp::World world;
+    std::vector<cpp::Light> lights = {light, dir_light};
     world.setParam("instance", cpp::CopiedData(instance));
-    world.setParam("light", cpp::CopiedData(light));
+    world.setParam("light", cpp::CopiedData(lights));
     world.commit();
 
     cam_eye = arcball.eye();
