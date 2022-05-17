@@ -11,9 +11,9 @@ ispc_include_directories(
 
 ispc_target_add_sources(ospray_module_example
   EllipsoidIntersect.ih
-  example_geometry.cpp
-  example_geometry.ispc
-  example_module_init.cpp
+  ellipsoid.cpp
+  ellipsoid.ispc
+  module_init.cpp
 )
 
 target_link_libraries(ospray_module_example PUBLIC

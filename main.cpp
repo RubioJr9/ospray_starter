@@ -194,7 +194,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
                                         glm::vec3(1.0f, -1.0f, 0.0f)};
 
     // create and setup our geometry
-    cpp::Geometry mesh("example_ellipsoids");
+    cpp::Geometry mesh("ellipsoids");
     mesh.setParam("ellipsoid.position", cpp::CopiedData(positions));
     mesh.setParam("radius", 0.5f);
     std::vector<glm::vec3> radii = {glm::vec3(1.0f, 1.0f, 0.25f),

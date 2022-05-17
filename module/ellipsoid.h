@@ -6,10 +6,9 @@
 #include "geometry/Geometry.h"
 
 namespace ospray {
-namespace example {
-
-    struct OSPRAY_SDK_INTERFACE ExampleEllipsoids : public Geometry {
-        ExampleEllipsoids();
+namespace geometry {
+    struct OSPRAY_SDK_INTERFACE Ellipsoids : public Geometry {
+        Ellipsoids();
 
         virtual std::string toString() const override;
 
@@ -26,6 +25,4 @@ namespace example {
         Ref<const DataT<vec3f>> eigvec1Data;
         Ref<const DataT<vec3f>> eigvec2Data;
     };
-
-}
-}
+}}

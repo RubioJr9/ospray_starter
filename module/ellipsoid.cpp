@@ -2,26 +2,26 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // ospray
-#include "example_geometry.h"
+#include "ellipsoid.h"
 #include "common/Data.h"
 #include "common/World.h"
 // ispc-generated files
-#include "example_geometry_ispc.h"
+#include "ellipsoid_ispc.h"
 
 namespace ospray {
-namespace example {
+namespace geometry {
 
-    ExampleEllipsoids::ExampleEllipsoids()
+    Ellipsoids::Ellipsoids()
     {
-        ispcEquivalent = ispc::ExampleEllipsoids_create();
+        ispcEquivalent = ispc::Ellipsoids_create();
     }
 
-    std::string ExampleEllipsoids::toString() const
+    std::string Ellipsoids::toString() const
     {
         return "ospray::ExampleEllipsoids";
     }
 
-    void ExampleEllipsoids::commit()
+    void Ellipsoids::commit()
     {
         if (!embreeDevice) {
             throw std::runtime_error("invalid Embree device");
@@ -37,20 +37,20 @@ namespace example {
         eigvec1Data = getParamDataT<vec3f>("ellipsoid.eigvec1");
         eigvec2Data = getParamDataT<vec3f>("ellipsoid.eigvec2");
 
-        ispc::ExampleEllipsoids_set(getIE(),
-                                 embreeGeometry,
-                                 ispc(vertexData),
-                                 ispc(radiiData),
-                                 ispc(radiusData),
-                                 ispc(texcoordData),
-                                 radius,
-                                 ispc(eigvec1Data),
-                                 ispc(eigvec2Data));
+        ispc::Ellipsoids_set(getIE(),
+                             embreeGeometry,
+                             ispc(vertexData),
+                             ispc(radiiData),
+                             ispc(radiusData),
+                             ispc(texcoordData),
+                             radius,
+                             ispc(eigvec1Data),
+                             ispc(eigvec2Data));
 
         postCreationInfo();
     }
 
-    size_t ExampleEllipsoids::numPrimitives() const
+    size_t Ellipsoids::numPrimitives() const
     {
         return vertexData ? vertexData->size() : 0;
     }
