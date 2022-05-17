@@ -6,7 +6,7 @@
 #include "geometry/Geometry.h"
 
 namespace ospray {
-namespace geometry {
+namespace tensor_geometry {
     struct OSPRAY_SDK_INTERFACE Ellipsoids : public Geometry {
         Ellipsoids();
 

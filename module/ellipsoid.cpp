@@ -9,7 +9,7 @@
 #include "ellipsoid_ispc.h"
 
 namespace ospray {
-namespace geometry {
+namespace tensor_geometry {
 
     Ellipsoids::Ellipsoids()
     {
@@ -18,7 +18,7 @@ namespace geometry {
 
     std::string Ellipsoids::toString() const
     {
-        return "ospray::ExampleEllipsoids";
+        return "ospray::Ellipsoids";
     }
 
     void Ellipsoids::commit()

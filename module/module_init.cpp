@@ -5,10 +5,10 @@
 
 using namespace ospray;
 
-extern "C" OSPError OSPRAY_DLLEXPORT ospray_module_init_example(int16_t versionMajor,
-                                                                int16_t versionMinor,
-                                                                int16_t /*versionPatch*/)
+extern "C" OSPError OSPRAY_DLLEXPORT ospray_module_init_tensor_geometry(int16_t versionMajor,
+                                                                        int16_t versionMinor,
+                                                                        int16_t /*versionPatch*/)
 {
-    Geometry::registerType<geometry::Ellipsoids>("ellipsoids");
+    Geometry::registerType<tensor_geometry::Ellipsoids>("ellipsoids");
     return OSP_NO_ERROR;
 }
