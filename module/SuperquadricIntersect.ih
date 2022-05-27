@@ -6,6 +6,63 @@
 #include "rkcommon/math/vec.ih"
 #include "math/AffineSpace.ih"
 
+/* bool flip_interp = true; */
+/* float interp = 0.5; */
+const uniform float emphasis = 3.0;
+const uniform float EPSILON = 0.01;
+const int steps = 512;
+const float stepSize = 1.0/steps;
+
+uniform vec2f getAB(uniform vec3f eigvals)
+{
+  uniform double eigvalsSumInv = 1.0/(eigvals.x + eigvals.y + eigvals.z);
+  /* double cl = (eigvals.x - eigvals.y) * eigvalsSumInv; */
+  /* double cp = 2.0 * (eigvals.y - eigvals.z) * eigvalsSumInv; */
+  uniform double cl = 0.2;
+  uniform double cp = 0.2;
+  /* if (interp > 1.0 || interp < 0.0) flip_interp = !flip_interp; */
+  /* if (flip_interp) */
+    /* interp -= 0.01; */
+  /* else */
+    /* interp += 0.01; */
+  uniform bool linear = cl >= cp;
+
+  const uniform float pPower = pow((1.0 - cp), emphasis);
+  const uniform float lPower = pow((1.0 - cl), emphasis);
+  const uniform float A = linear ? pPower : lPower;
+  const uniform float B = linear ? lPower : pPower;
+  return make_vec2f(A, B);
+}
+
+
+// inside: <0, on: =0, outside: >0
+float insideOutside(vec3f p, vec2f AB, float radius)
+{
+  float beta_inv = 1.0/AB.y;
+  vec3f e = make_vec3f(1.0/AB.x, beta_inv, AB.x * beta_inv);
+
+  float x_part = pow(p.x * p.x, e.x);
+  float y_part = pow(p.y * p.y, e.x);
+  float z_part = pow(p.z * p.z, e.y);
+  float xy_part = pow(x_part + y_part, e.z);
+  return xy_part + z_part - 1;
+}
+
+vec3f normal(vec3f p, vec2f AB, float radius)
+{
+  float alpha_inv = 1.0/AB.x;
+  float beta_inv = 1.0/AB.y;
+  vec3f e = make_vec3f(alpha_inv, beta_inv, AB.x * beta_inv);
+
+  float x_part = pow(p.x * p.x, e.x);
+  float y_part = pow(p.y * p.y, e.x);
+  float z_part = pow(p.z * p.z, e.y-1.0);
+  float xy_part = pow(x_part + y_part, e.z-1.0);
+  float x_coeff = pow(p.x * p.x, e.x-1.0);
+  float y_coeff = pow(p.y * p.y, e.x-1.0);
+  return 2.0 * make_vec3f(p.x * x_coeff * xy_part, p.y * y_coeff * xy_part, p.z * z_part);
+}
+
 inline Intersections intersectSuperquadric(const vec3f &rayOrg,
     const vec3f &rayDir,
     const uniform vec3f &center,
@@ -15,23 +72,69 @@ inline Intersections intersectSuperquadric(const vec3f &rayOrg,
     const uniform affine3f &i)
 {
   Intersections isect;
-  isect.entry.hit = false;
-  isect.exit.hit = false;
+  isect.entry.hit = isect.exit.hit = false;
   isect.entry.t = inf;
   isect.exit.t = -inf;
 
-  const uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
-  const uniform vec3f scaled_eigvec1 = eigvals.x * eigvec1;
-  const uniform vec3f scaled_eigvec2 = eigvals.y * eigvec2;
-  const uniform vec3f scaled_eigvec3 = eigvals.z * eigvec3;
-  uniform affine3f basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center);
-  uniform affine3f inv = rcp(basis);
+  /* const uniform vec3f eigvec3 = cross(eigvec1, eigvec2); */
+  /* const uniform vec3f scaled_eigvec1 = eigvals.x * eigvec1; */
+  /* const uniform vec3f scaled_eigvec2 = eigvals.y * eigvec2; */
+  /* const uniform vec3f scaled_eigvec3 = eigvals.z * eigvec3; */
+  /* uniform affine3f basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center); */
+  /* uniform affine3f inv = rcp(basis); */
 
-  vec3f cRayOrg = xfmPoint(inv, rayOrg);
-  vec3f cRayDir = xfmVector(inv, rayDir);
+  /* vec3f cRayOrg = xfmPoint(inv, rayOrg); */
+  /* vec3f cRayDir = xfmVector(inv, rayDir); */
 
-  isect = intersectSphere(cRayOrg, cRayDir, make_vec3f(0,0,0), 1);
-  isect.entry.N = xfmVector(transposed(inv.l), isect.entry.N);
-  isect.exit.N = xfmVector(transposed(inv.l), isect.exit.N);
+  /* Intersections isectSphere = intersectSphere(rayOrg, rayDir, center, eigvals.x); */
+  uniform box3f box;
+  box.lower = make_vec3f(-1,-1,-1);
+  box.upper = make_vec3f(1,1,1);
+  Intersections isectBox = intersectBox(rayOrg, rayDir, box);
+  if(!isectBox.entry.hit) return isect;
+  vec3f entryBox = rayOrg + rayDir * isectBox.entry.t;
+  /* vec3f entrySphere = rayOrg + rayDir * isectSphere.entry.t; */
+  vec3f exitBox = rayOrg + rayDir * isectBox.exit.t;
+  /* vec3f inc = stepSize * (isect.exit.t - isect.entry.t) * cRayDir; */
+  vec3f inc;
+  /* if (isectSphere.entry.hit) */
+    /* inc = stepSize * (entrySphere - entryBox); */
+  /* else */
+  inc = stepSize * (exitBox - entryBox);
+  vec3f p = entryBox;
+
+  /* return isect; */
+  /* isect.entry.N = xfmVector(transposed(inv.l), isect.entry.N); */
+  /* isect.exit.N = xfmVector(transposed(inv.l), isect.exit.N); */
+
+  float radius = eigvals.x;
+  float diffT = 0.0;
+  float pastT = inf;
+  /* float inc = 0.1; */
+  /* vec3f p = rayOrg + inc * rayDir; */
+  vec2f AB = getAB(eigvals);
+  // TODO add exit hit
+  float s = 0.0;
+  for (int step = 0; step <= steps; ++step)
+  {
+    float io = insideOutside(p, AB, radius);
+    if (abs(io) < EPSILON)
+    {
+      isect.entry.hit = true;
+      isect.entry.t = length(p);
+      isect.entry.N = normal(p, AB, radius);
+      break;
+    }
+    s += stepSize;
+    p = p + inc;
+    diffT = io - pastT;
+    if (diffT > 0.0)
+      break;
+    pastT = io;
+  }
+
+  isect.entry.u = s;
+
+
   return isect;
 }

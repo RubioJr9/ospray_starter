@@ -11,9 +11,11 @@ ispc_include_directories(
 
 ispc_target_add_sources(ospray_module_tensor_geometry
   EllipsoidIntersect.ih
-  SuperquadricIntersect.ih
   ellipsoid.cpp
   ellipsoid.ispc
+  SuperquadricIntersect.ih
+  superquadric.cpp
+  superquadric.ispc
   module_init.cpp
 )
 
