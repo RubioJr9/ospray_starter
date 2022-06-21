@@ -6,85 +6,106 @@
 #include "rkcommon/math/vec.ih"
 #include "math/AffineSpace.ih"
 
-/* bool flip_interp = true; */
-/* float interp = 0.5; */
 const uniform float emphasis = 3.0;
-const uniform float EPSILON = 0.01;
-const int steps = 512;
+const uniform float EPSILON_LINEAR = 0.001;
+const uniform float EPSILON_NEWTON = 0.001;
+const int steps = 500;
 const float stepSize = 1.0/steps;
 
-uniform vec2f getAB(uniform vec3f eigvals)
+uniform double getLinearCertainty(uniform vec3f eigvals)
+{
+  uniform double eigvalsSumInv = 1.0/(eigvals.x + eigvals.y + eigvals.z); // sum: 1.1
+  uniform double cl = (eigvals.x - eigvals.y) * eigvalsSumInv; // (.5-.5)/1.1=0.0
+  return cl;
+}
+
+uniform double getPlanarCertainty(uniform vec3f eigvals)
 {
   uniform double eigvalsSumInv = 1.0/(eigvals.x + eigvals.y + eigvals.z);
-  /* double cl = (eigvals.x - eigvals.y) * eigvalsSumInv; */
-  /* double cp = 2.0 * (eigvals.y - eigvals.z) * eigvalsSumInv; */
-  uniform double cl = 0.2;
-  uniform double cp = 0.2;
-  /* if (interp > 1.0 || interp < 0.0) flip_interp = !flip_interp; */
-  /* if (flip_interp) */
-    /* interp -= 0.01; */
-  /* else */
-    /* interp += 0.01; */
-  uniform bool linear = cl >= cp;
+  uniform double cp = 2.0 * (eigvals.y - eigvals.z) * eigvalsSumInv; // 2*(.5-.1)/1.1=0.727272727
+  return cp;
+}
 
-  const uniform float pPower = pow((1.0 - cp), emphasis);
-  const uniform float lPower = pow((1.0 - cl), emphasis);
+uniform double getSphericalCertainty(uniform vec3f eigvals)
+{
+  uniform double eigvalsSumInv = 1.0/(eigvals.x + eigvals.y + eigvals.z);
+  uniform double cs = 3.0 * eigvals.z * eigvalsSumInv;
+  return cs;
+}
+
+uniform vec2f getAB(uniform double cl, uniform double cp)
+{
+  uniform bool linear = cl >= cp;
+  const uniform float pPower = pow((1.0 - cp), emphasis); // (1.0-0.727)^3
+  const uniform float lPower = pow((1.0 - cl), emphasis); // (1.0)^3
   const uniform float A = linear ? pPower : lPower;
   const uniform float B = linear ? lPower : pPower;
   return make_vec2f(A, B);
 }
 
-
-// inside: <0, on: =0, outside: >0
-float insideOutside(vec3f p, vec2f AB, float radius)
+// Superquadric implicit gradient
+vec3f insideOutside_diff(vec3f p, uniform float alpha, uniform float beta)
 {
-  float beta_inv = 1.0/AB.y;
-  vec3f e = make_vec3f(1.0/AB.x, beta_inv, AB.x * beta_inv);
-
-  float x_part = pow(p.x * p.x, e.x);
-  float y_part = pow(p.y * p.y, e.x);
-  float z_part = pow(p.z * p.z, e.y);
-  float xy_part = pow(x_part + y_part, e.z);
-  return xy_part + z_part - 1;
+    vec3f dq;
+    float x_sqr = p.x*p.x;
+    float y_sqr = p.y*p.y;
+    float z_sqr = p.z*p.z;
+    uniform float alpha_inv = 1.0/alpha;
+    uniform float beta_inv = 1.0/beta;
+    float diff = pow(pow(x_sqr,alpha_inv)+pow(y_sqr,alpha_inv),alpha*beta_inv-1.0);
+    dq.x = pow(x_sqr,alpha_inv)*diff/p.x;
+    dq.y = pow(y_sqr,alpha_inv)*diff/p.y;
+    dq.z = pow(z_sqr,beta_inv)/p.z;
+    dq = 2*dq*beta_inv;
+    return dq;
 }
 
-vec3f normal(vec3f p, vec2f AB, float radius)
+vec3f insideOutsideXAxis_diff(vec3f p, uniform float alpha, uniform float beta)
 {
-  float alpha_inv = 1.0/AB.x;
-  float beta_inv = 1.0/AB.y;
-  vec3f e = make_vec3f(alpha_inv, beta_inv, AB.x * beta_inv);
-
-  float x_part = pow(p.x * p.x, e.x);
-  float y_part = pow(p.y * p.y, e.x);
-  float z_part = pow(p.z * p.z, e.y-1.0);
-  float xy_part = pow(x_part + y_part, e.z-1.0);
-  float x_coeff = pow(p.x * p.x, e.x-1.0);
-  float y_coeff = pow(p.y * p.y, e.x-1.0);
-  return 2.0 * make_vec3f(p.x * x_coeff * xy_part, p.y * y_coeff * xy_part, p.z * z_part);
+    vec3f dq;
+    float x_sqr = p.x*p.x;
+    float y_sqr = p.y*p.y;
+    float z_sqr = p.z*p.z;
+    uniform float alpha_inv = 1.0/alpha;
+    uniform float beta_inv = 1.0/beta;
+    float diff = pow(pow(y_sqr,alpha_inv)+pow(z_sqr,alpha_inv),alpha*beta_inv-1.0);
+    dq.y = pow(y_sqr,alpha_inv)*diff/p.y;
+    dq.z = pow(z_sqr,alpha_inv)*diff/p.z;
+    dq.x = pow(x_sqr,beta_inv)/p.x;
+    dq = 2*dq*beta_inv;
+    return dq;
 }
 
-inline Intersections intersectSuperquadric(const vec3f &rayOrg,
+float insideOutside(vec3f p, const uniform float alpha, const uniform float beta)
+{
+  const uniform float alpha_inv = 1.0/alpha;
+  const uniform float beta_inv = 1.0/beta;
+  return pow(pow(p.x*p.x,alpha_inv) + pow(p.y*p.y,alpha_inv), alpha*beta_inv) + pow(p.z*p.z,beta_inv) - 1.0;
+}
+
+float insideOutsideXAxis(vec3f p, const uniform float alpha, const uniform float beta)
+{
+  const uniform float alpha_inv = 1.0/alpha;
+  const uniform float beta_inv = 1.0/beta;
+  return pow(pow(p.y*p.y,alpha_inv) + pow(p.z*p.z,alpha_inv), alpha*beta_inv) + pow(p.x*p.x,beta_inv) - 1.0;
+}
+
+vec3f normal(const vec3f& v)
+{
+  return v/length(v);
+}
+
+inline Intersections intersectSuperquadricLinear(const vec3f &rayOrg,
     const vec3f &rayDir,
     const uniform vec3f &center,
     const uniform vec3f &eigvals,
     const uniform vec3f &eigvec1,
-    const uniform vec3f &eigvec2,
-    const uniform affine3f &i)
+    const uniform vec3f &eigvec2)
 {
   Intersections isect;
   isect.entry.hit = isect.exit.hit = false;
   isect.entry.t = inf;
   isect.exit.t = -inf;
-
-  /* const uniform vec3f eigvec3 = cross(eigvec1, eigvec2); */
-  /* const uniform vec3f scaled_eigvec1 = eigvals.x * eigvec1; */
-  /* const uniform vec3f scaled_eigvec2 = eigvals.y * eigvec2; */
-  /* const uniform vec3f scaled_eigvec3 = eigvals.z * eigvec3; */
-  /* uniform affine3f basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center); */
-  /* uniform affine3f inv = rcp(basis); */
-
-  /* vec3f cRayOrg = xfmPoint(inv, rayOrg); */
-  /* vec3f cRayDir = xfmVector(inv, rayDir); */
 
   /* Intersections isectSphere = intersectSphere(rayOrg, rayDir, center, eigvals.x); */
   uniform box3f box;
@@ -93,48 +114,125 @@ inline Intersections intersectSuperquadric(const vec3f &rayOrg,
   Intersections isectBox = intersectBox(rayOrg, rayDir, box);
   if(!isectBox.entry.hit) return isect;
   vec3f entryBox = rayOrg + rayDir * isectBox.entry.t;
-  /* vec3f entrySphere = rayOrg + rayDir * isectSphere.entry.t; */
   vec3f exitBox = rayOrg + rayDir * isectBox.exit.t;
-  /* vec3f inc = stepSize * (isect.exit.t - isect.entry.t) * cRayDir; */
-  vec3f inc;
-  /* if (isectSphere.entry.hit) */
-    /* inc = stepSize * (entrySphere - entryBox); */
-  /* else */
-  inc = stepSize * (exitBox - entryBox);
+  vec3f inc = 0.01 * (exitBox - entryBox);
   vec3f p = entryBox;
 
-  /* return isect; */
-  /* isect.entry.N = xfmVector(transposed(inv.l), isect.entry.N); */
-  /* isect.exit.N = xfmVector(transposed(inv.l), isect.exit.N); */
+  uniform double cl = getLinearCertainty(eigvals);
+  uniform double cp = getPlanarCertainty(eigvals);
+  uniform bool linear = cl >= cp;
+  uniform vec2f AB = getAB(cl, cp);
 
-  float radius = eigvals.x;
-  float diffT = 0.0;
-  float pastT = inf;
-  /* float inc = 0.1; */
-  /* vec3f p = rayOrg + inc * rayDir; */
-  vec2f AB = getAB(eigvals);
-  // TODO add exit hit
-  float s = 0.0;
+  bool movePos = true;
   for (int step = 0; step <= steps; ++step)
   {
-    float io = insideOutside(p, AB, radius);
-    if (abs(io) < EPSILON)
+    float io;
+    if (linear)
+      io = insideOutsideXAxis(p, AB.x, AB.y);
+    else
+      io = insideOutside(p, AB.x, AB.y);
+    if (abs(io) < EPSILON_LINEAR)
     {
       isect.entry.hit = true;
       isect.entry.t = length(p);
-      isect.entry.N = normal(p, AB, radius);
+      if (linear)
+        isect.entry.N = insideOutsideXAxis_diff(p, AB.x, AB.y);
+      else
+        isect.entry.N = insideOutside_diff(p, AB.x, AB.y);
+      isect.entry.N = normal(isect.entry.N);
+      isect.entry.u = (float)step / (float)steps;
       break;
     }
-    s += stepSize;
     p = p + inc;
-    diffT = io - pastT;
-    if (diffT > 0.0)
-      break;
-    pastT = io;
+    if ((movePos && io < 0) ||(!movePos && io > 0)) {
+      inc = -0.5 * inc;
+      movePos = !movePos;
+    }
   }
 
-  isect.entry.u = s;
 
 
+  return isect;
+}
+
+
+inline Intersections intersectSuperquadricNewton(const vec3f &rayOrg,
+    const vec3f &rayDir,
+    const uniform vec3f &center,
+    const uniform vec3f &eigvals,
+    const uniform vec3f &eigvec1,
+    const uniform vec3f &eigvec2)
+{
+  Intersections isect;
+  isect.entry.hit = isect.exit.hit = false;
+  isect.entry.t = inf;
+  isect.exit.t = -inf;
+
+  uniform box3f box;
+  box.lower = make_vec3f(-1,-1,-1);
+  box.upper = make_vec3f(1,1,1);
+  Intersections isectBox = intersectBox(rayOrg, rayDir, box);
+  Intersections isectSphere = intersectSphere(rayOrg, rayDir, center, eigvals.x*1.73);
+  Intersections isectCyl = intersectCylinder(rayOrg, rayDir, make_vec3f(0,-1,0), make_vec3f(0,1,0),eigvals.x);
+  if(!isectBox.entry.hit) return isect;
+
+  uniform double cl = getLinearCertainty(eigvals);
+  uniform double cp = getPlanarCertainty(eigvals);
+  uniform double cs = getSphericalCertainty(eigvals);
+  uniform bool linear = cl >= cp;
+  uniform vec2f AB = getAB(cl, cp);
+  float t = isectBox.entry.t;
+  // float t = 0.0; // hitting nan gradients with this
+  for (int step = 0; step < steps; ++step)
+  {
+    vec3f p = rayOrg + t*rayDir;
+    float io;
+    vec3f gradient;
+    if (linear) {
+      io = insideOutsideXAxis(p, AB.x, AB.y);
+      gradient = insideOutsideXAxis_diff(p, AB.x, AB.y);
+    }
+    else {
+      io = insideOutside(p, AB.x, AB.y);
+      gradient = insideOutside_diff(p, AB.x, AB.y);
+    }
+    float sqd = dot(gradient, rayDir);
+    if (abs(io) < EPSILON_NEWTON)
+    {
+      isect.entry.hit = true;
+      isect.entry.t = t;
+      isect.entry.N = normalize(gradient);
+      /* isect.entry.u = (float)step / (float)steps; */
+      break;
+    }
+      float stepsize = io / sqd;
+      t -= stepsize;
+  }
+
+  return isect;
+}
+
+inline Intersections intersectSuperquadric(const vec3f &rayOrg,
+    const vec3f &rayDir,
+    const uniform vec3f &center,
+    const uniform vec3f &eigvals,
+    const uniform vec3f &eigvec1,
+    const uniform vec3f &eigvec2)
+{
+  const uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
+  const uniform vec3f scaled_eigvec1 = eigvals.x * eigvec1;
+  const uniform vec3f scaled_eigvec2 = eigvals.y * eigvec2;
+  const uniform vec3f scaled_eigvec3 = eigvals.z * eigvec3;
+  uniform affine3f trans = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center);
+  uniform affine3f inv = rcp(trans);
+  uniform linear3f rot = make_LinearSpace3f(eigvec1, eigvec2, eigvec3);
+  uniform linear3f inv_scale = make_LinearSpace3f(make_vec3f(1.0/eigvals.x,0,0), make_vec3f(0,1.0/eigvals.y,0), make_vec3f(0,0,1.0/eigvals.z));
+
+  vec3f cRayOrg = xfmPoint(inv, rayOrg);
+  vec3f cRayDir = xfmVector(inv, rayDir);
+
+  /* Intersections isect = intersectSuperquadricLinear(cRayOrg, cRayDir, center, eigvals, eigvec1, eigvec2); */
+  Intersections isect = intersectSuperquadricNewton(cRayOrg, cRayDir, center, eigvals, eigvec1, eigvec2);
+  isect.entry.N = rot * inv_scale * isect.entry.N;
   return isect;
 }

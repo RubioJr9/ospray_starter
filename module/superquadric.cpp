@@ -30,12 +30,12 @@ namespace tensor_geometry {
             embreeGeometry = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_USER);
         }
         radius = getParam<float>("radius", 0.01f);
-        vertexData = getParamDataT<vec3f>("superquadric.position", true);
-        radiiData = getParamDataT<vec3f>("superquadric.radii");
-        radiusData = getParamDataT<float>("superquadric.radius");
-        texcoordData = getParamDataT<vec2f>("superquadric.texcoord");
-        eigvec1Data = getParamDataT<vec3f>("superquadric.eigvec1");
-        eigvec2Data = getParamDataT<vec3f>("superquadric.eigvec2");
+        vertexData = getParamDataT<vec3f>("glyph.position", true);
+        radiiData = getParamDataT<vec3f>("glyph.radii");
+        radiusData = getParamDataT<float>("glyph.radius");
+        texcoordData = getParamDataT<vec2f>("glyph.texcoord");
+        eigvec1Data = getParamDataT<vec3f>("glyph.eigvec1");
+        eigvec2Data = getParamDataT<vec3f>("glyph.eigvec2");
 
         ispc::Superquadrics_set(getIE(),
                              embreeGeometry,

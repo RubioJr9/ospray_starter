@@ -30,12 +30,12 @@ namespace tensor_geometry {
             embreeGeometry = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_USER);
         }
         radius = getParam<float>("radius", 0.01f);
-        vertexData = getParamDataT<vec3f>("ellipsoid.position", true);
-        radiiData = getParamDataT<vec3f>("ellipsoid.radii");
-        radiusData = getParamDataT<float>("ellipsoid.radius");
-        texcoordData = getParamDataT<vec2f>("ellipsoid.texcoord");
-        eigvec1Data = getParamDataT<vec3f>("ellipsoid.eigvec1");
-        eigvec2Data = getParamDataT<vec3f>("ellipsoid.eigvec2");
+        vertexData = getParamDataT<vec3f>("glyph.position", true);
+        radiiData = getParamDataT<vec3f>("glyph.radii");
+        radiusData = getParamDataT<float>("glyph.radius");
+        texcoordData = getParamDataT<vec2f>("glyph.texcoord");
+        eigvec1Data = getParamDataT<vec3f>("glyph.eigvec1");
+        eigvec2Data = getParamDataT<vec3f>("glyph.eigvec2");
 
         ispc::Ellipsoids_set(getIE(),
                              embreeGeometry,

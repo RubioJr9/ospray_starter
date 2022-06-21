@@ -100,14 +100,15 @@ void Superquadrics_intersect_kernel(const RTCIntersectFunctionNArguments *unifor
     const uniform vec3f center = get_vec3f(self->vertex, primID);
     const uniform vec3f eigvec1 = get_vec3f(self->eigvec1, primID);
     const uniform vec3f eigvec2 = get_vec3f(self->eigvec2, primID);
-    const uniform vec3f eigvec3 = cross(eigvec1, eigvec2);
-    const uniform vec3f scaled_eigvec1 = radii.x * eigvec1;
-    const uniform vec3f scaled_eigvec2 = radii.y * eigvec2;
-    const uniform vec3f scaled_eigvec3 = radii.z * eigvec3;
-    self->basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center);
-    self->inv_basis = rcp(self->basis);
+    /* const uniform vec3f eigvec3 = cross(eigvec1, eigvec2); */
+    /* const uniform vec3f scaled_eigvec1 = radii.x * eigvec1; */
+    /* const uniform vec3f scaled_eigvec2 = radii.y * eigvec2; */
+    /* const uniform vec3f scaled_eigvec3 = radii.z * eigvec3; */
+    /* self->basis = make_AffineSpace3f(scaled_eigvec1, scaled_eigvec2, scaled_eigvec3, center); */
+    /* self->inv_basis = rcp(self->basis); */
+    /* const uniform linear3f rot = make_LinearSpace3f(eigvec1, eigvec2, eigvec3); */
 
-    const Intersections isect = intersectSuperquadric(ray->org, ray->dir, center, radii, eigvec1, eigvec2, self->inv_basis);
+    const Intersections isect = intersectSuperquadric(ray->org, ray->dir, center, radii, eigvec1, eigvec2);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);
