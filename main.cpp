@@ -184,33 +184,44 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     }
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
 
-    // cpp::Renderer renderer("debug");
+    #if 1
     cpp::Renderer renderer("scivis");
-    renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));
+    #else
+    cpp::Renderer renderer("debug");
     // renderer.setParam("method", "backfacing_Ng");
-    // renderer.setParam("method", "texCoord");
+    renderer.setParam("method", "texCoord");
     // renderer.setParam("method", "Ng");
     // renderer.setParam("method", "backfacing_Ns");
+    #endif
+    renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));
     renderer.commit();
 
     // Superquadric positions
     std::vector<glm::vec3> positions = {glm::vec3(-1.0f, -1.0f, 0.0f),
                                         glm::vec3(0.0f, 1.0f, 0.0f),
-                                        glm::vec3(1.0f, -1.0f, 0.0f)};
+                                        glm::vec3(1.0f, -1.0f, 0.0f),
+                                        glm::vec3(1,1,1),
+                                        glm::vec3(-1,0,-1)};
 
     // create and setup our geometry
     cpp::Geometry mesh("superquadrics");
     mesh.setParam("glyph.position", cpp::CopiedData(positions));
     mesh.setParam("radius", 0.5f);
-    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.2f, 0.2f),
+    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.05f, 0.05f),
                                     glm::vec3(1.0f, 0.4f, 0.25f),
-                                    glm::vec3(0.5f, 0.5f, 0.1f)};
+                                    glm::vec3(0.5f, 0.5f, 0.05f),
+                                    glm::vec3(0.3,0.25,0.25),
+                                    glm::vec3(.3,.1,.1)};
     std::vector<glm::vec3> eigvec1 = {glm::vec3(0.88232f, 0.270515f, -0.385141f),
                                       glm::vec3(0.671044f, 0.514783f, -0.533571f),
-                                      glm::vec3(0.544639f, 0.393851f, -0.740439f)};
+                                      glm::vec3(0.544639f, 0.393851f, -0.740439f),
+                                      glm::vec3(1,0,0),
+                                      glm::vec3(0,1,0)};
     std::vector<glm::vec3> eigvec2 = {glm::vec3(-0.194475f, 0.954738f, 0.225065f),
                                       glm::vec3(-0.154719f, 0.801048f, 0.578259f),
-                                      glm::vec3(-0.393851f, 0.899576f, 0.188796f)};
+                                      glm::vec3(-0.393851f, 0.899576f, 0.188796f),
+                                      glm::vec3(0,1,0),
+                                      glm::vec3(1,0,0)};
     mesh.setParam("glyph.radii", cpp::CopiedData(radii));
     mesh.commit();
 
@@ -304,6 +315,10 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     bool camera_changed = true;
     bool window_changed = false;
     bool take_screenshot = false;
+    const static int framesAveraged = 256;
+    std::array<float, framesAveraged> frameTime = {0};
+    int frameIndex = 0;
+    int framesRecorded = 0;
     while (!done) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -436,7 +451,20 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             }
             pending_commits.clear();
 
+            struct timeval t1, t2;
+            double elapsedTime;
+
+            // start timer
             future = fb.renderFrame(renderer, camera, world);
+            future.wait();
+            frameTime[frameIndex++] = future.duration();
+            if (frameIndex >= framesAveraged)
+                frameIndex = 0;
+            float totalFrameTime = 0.f;
+            for (int i = 0; i < std::min(framesAveraged, ++framesRecorded); ++i)
+                totalFrameTime += frameTime[i];
+            float avgTime = totalFrameTime / std::min(framesAveraged, framesRecorded);
+            std::cout << "fps: " << 1.0/avgTime << std::endl;
         }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
