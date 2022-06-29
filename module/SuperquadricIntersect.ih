@@ -82,49 +82,59 @@ inline Intersections intersectSuperquadricImpl(const vec3f &rayOrg,
     const uniform vec3f &eigvec1,
     const uniform vec3f &eigvec2)
 {
+  // Default is miss
   Intersections isect;
   isect.entry.hit = isect.exit.hit = false;
   isect.entry.t = inf;
   isect.exit.t = -inf;
 
+  // get alpha & beta values for determining shape from superquadric shape
   uniform double cl = getLinearCertainty(eigvals);
   uniform double cp = getPlanarCertainty(eigvals);
   uniform bool linear = cl >= cp;
   uniform vec2f AB = getAB(cl, cp);
 
-
+  // since we constrain superquadric space to shapes for superquadric tensor glyphs,
+  // we can the intersections of box, sphere, & cylinder
   const uniform box3f box = make_box3f(make_vec3f(-1,-1,-1), make_vec3f(1,1,1));
   Intersections isectBox = intersectBox(rayOrg, rayDir, box);
-  Intersections isectSphere = intersectSphere(rayOrg, rayDir, make_vec3f(0.f,0.f,0.f), 1.0);
+  Intersections isectSph = intersectSphere(rayOrg, rayDir, make_vec3f(0.f,0.f,0.f), 1.0);
   float invRayLen = 1.0 / length(rayDir);
   Intersections isectCyl;
   if (linear)
     isectCyl = intersectCylinder(rayOrg, rayDir/length(rayDir), make_vec3f(-1,0,0), make_vec3f(1,0,0),1);
   else
     isectCyl = intersectCylinder(rayOrg, rayDir/length(rayDir), make_vec3f(0,0,-1), make_vec3f(0,0,1),1);
-  if(!isectBox.entry.hit) return isect;
+
+  bool entryHit = isectBox.entry.hit;
+  if (!entryHit && !isectBox.exit.hit) return isect;
+
   isectCyl.entry.t *= invRayLen;
   isectCyl.exit.t *= invRayLen;
 
+  Hit boxHit, cylHit, sphHit;
+  if (isectBox.entry.t > 0) {
+    boxHit = isectBox.entry;
+    cylHit = isectCyl.entry;
+    sphHit = isectSph.entry;
+  } else {
+    boxHit = isectBox.exit;
+    cylHit = isectCyl.exit;
+    sphHit = isectSph.exit;
+  }
 
-  vec3f boxPos = rayOrg + rayDir * isectBox.entry.t;
-  vec3f spherePos = rayOrg + rayDir * isectSphere.entry.t;
-  vec3f cylPos = rayOrg + rayDir * isectCyl.entry.t;
   float spherical = pow(AB.y,2.0*AB.x/AB.y);
   float cylindrical = pow(AB.x,1.0/AB.y);
-  float boxy = 1.0;
-  if (isectCyl.entry.hit) boxy -= cylindrical;
-  if (isectSphere.entry.hit) boxy -= spherical;
 
   float t;
-  if (isectCyl.entry.hit && isectSphere.entry.hit)
-    t = boxy*isectBox.entry.t + cylindrical*isectCyl.entry.t + spherical*isectSphere.entry.t;
-  else if (isectCyl.entry.hit)
-    t = boxy*isectBox.entry.t + cylindrical*isectCyl.entry.t;
-  else if (isectSphere.entry.hit)
-    t = boxy*isectBox.entry.t + spherical*isectSphere.entry.t;
+  if (cylHit.hit && sphHit.hit)
+    t = (1.0-cylindrical-spherical)*boxHit.t + cylindrical*cylHit.t + spherical*sphHit.t;
+  else if (cylHit.hit)
+    t = (1.0-cylindrical)*boxHit.t + cylindrical*cylHit.t;
+  else if (sphHit.hit)
+    t = (1.0-spherical)*boxHit.t + spherical*sphHit.t;
   else
-    t = isectBox.entry.t;
+    t = boxHit.t;
 
   #if 1 // Newton Method
   for (int step = 0; step < STEPS; ++step)
