@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <iostream>
 #include <limits>
+#include <stdlib.h>
 #include <thread>
 #include <SDL.h>
 #include <ospray/ospray.h>
@@ -92,7 +93,7 @@ int main(int argc, const char **argv)
     ospDeviceRelease(device);
 
     // Load our module
-    ospLoadModule("example");
+    ospLoadModule("tensor_geometry");
 
     if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
         std::cerr << "Failed to init SDL: " << SDL_GetError() << "\n";
@@ -152,6 +153,29 @@ int main(int argc, const char **argv)
     return 0;
 }
 
+std::vector<glm::vec3> latVolNodes(int x, int y, int z)
+{
+    const int size = x*y*z;
+    std::vector<glm::vec3> positions(size);
+    int index = 0;
+    for (int i = 0; i < x; ++i)
+        for (int j = 0; j < y; ++j)
+            for (int k = 0; k < z; ++k)
+                positions[index++] = glm::vec3((float)i, (float)j, (float)k);
+    return positions;
+}
+
+std::vector<float> makeRandomCoeffs(int size, int lMax)
+{
+    int coeffCount = ((lMax+1) * (lMax+1)) * size;
+    std::vector<float> coeffs(coeffCount);
+
+    int index = 0;
+    while (index != coeffCount)
+        coeffs[index++] = rand() / double(RAND_MAX) * 0.1f;
+    return coeffs;
+}
+
 void run_app(const std::vector<std::string> &args, SDL_Window *window)
 {
     bool cmdline_camera = false;
@@ -184,34 +208,72 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     }
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
 
+    #if 1
     cpp::Renderer renderer("scivis");
+    #else
+    cpp::Renderer renderer("debug");
+    // renderer.setParam("method", "backfacing_Ng");
+    renderer.setParam("method", "texCoord");
+    // renderer.setParam("method", "Ng");
+    // renderer.setParam("method", "backfacing_Ns");
+    #endif
     renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));
     renderer.commit();
 
-    // Ellipsoid positions
-    std::vector<glm::vec3> positions = {glm::vec3(-1.0f, -1.0f, 0.0f),
-                                        glm::vec3(0.0f, 1.0f, 0.0f),
-                                        glm::vec3(1.0f, -1.0f, 0.0f)};
 
     // create and setup our geometry
-    cpp::Geometry mesh("example_ellipsoids");
-    mesh.setParam("ellipsoid.position", cpp::CopiedData(positions));
-    mesh.setParam("radius", 0.5f);
-    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 1.0f, 0.25f),
+    #if 0 // regular tensor glyphs
+
+    // Superquadric positions
+    std::vector<glm::vec3> positions = {glm::vec3(-1.0f, -1.0f, 0.0f),
+                                        glm::vec3(0.0f, 1.0f, 0.0f),
+                                        glm::vec3(1.0f, -1.0f, 0.0f),
+                                        glm::vec3(1,1,1),
+                                        glm::vec3(-1,0,-1)};
+
+    std::vector<glm::vec3> radii = {glm::vec3(1.0f, 0.05f, 0.05f),
                                     glm::vec3(1.0f, 0.4f, 0.25f),
-                                    glm::vec3(0.5f, 0.5f, 0.1f)};
+                                    glm::vec3(0.5f, 0.5f, 0.05f),
+                                    glm::vec3(0.3,0.25,0.25),
+                                    glm::vec3(.3,.1,.1)};
     std::vector<glm::vec3> eigvec1 = {glm::vec3(0.88232f, 0.270515f, -0.385141f),
                                       glm::vec3(0.671044f, 0.514783f, -0.533571f),
-                                      glm::vec3(0.544639f, 0.393851f, -0.740439f)};
+                                      glm::vec3(0.544639f, 0.393851f, -0.740439f),
+                                      glm::vec3(1,0,0),
+                                      glm::vec3(0,1,0)};
     std::vector<glm::vec3> eigvec2 = {glm::vec3(-0.194475f, 0.954738f, 0.225065f),
                                       glm::vec3(-0.154719f, 0.801048f, 0.578259f),
-                                      glm::vec3(-0.393851f, 0.899576f, 0.188796f)};
-    mesh.setParam("ellipsoid.radii", cpp::CopiedData(radii));
+                                      glm::vec3(-0.393851f, 0.899576f, 0.188796f),
+                                      glm::vec3(0,1,0),
+                                      glm::vec3(1,0,0)};
+    cpp::Geometry mesh("superquadrics");
+    mesh.setParam("glyph.position", cpp::CopiedData(positions));
+    mesh.setParam("glyph.radii", cpp::CopiedData(radii));
+    mesh.setParam("glyph.eigvec1", cpp::CopiedData(eigvec1));
+    mesh.setParam("glyph.eigvec2", cpp::CopiedData(eigvec2));
     mesh.commit();
-
-    mesh.setParam("ellipsoid.eigvec1", cpp::CopiedData(eigvec1));
-    mesh.setParam("ellipsoid.eigvec2", cpp::CopiedData(eigvec2));
+    #else
+    // std::vector<glm::vec3> positions = {glm::vec3(0.0, 0.0, 0.0),
+    // glm::vec3(1.0, 0.0, 0.0)};
+    std::vector<glm::vec3> positions = latVolNodes(2,2,2);
+    // std::vector<float> coeffs =
+    //               {0.0,
+    //           0.0, 0.3, 0.0,
+    //      0.0, 0.0, 0.0, 0.7, 0.0,
+    // 0.0, 0.0, 0.7, 0.0, 0.0, 0.0, 0.0,
+    // 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    //                0.0,
+    //           0.0, 0.7, 0.0,
+    //      0.0, 0.0, 0.0, 0.9, 0.0,
+    // 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, 0.0,
+    // 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
+    std::vector<float> coeffs = makeRandomCoeffs(8, 4);
+    cpp::Geometry mesh("spherical_harmonics");
+    mesh.setParam("glyph.position", cpp::CopiedData(positions));
+    mesh.setParam("glyph.coefficients", cpp::CopiedData(coeffs));
+    mesh.setParam("glyph.degreeL", 4);
     mesh.commit();
+    #endif
 
     // put the mesh into a model
     cpp::GeometricModel model(mesh);
@@ -299,6 +361,10 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     bool camera_changed = true;
     bool window_changed = false;
     bool take_screenshot = false;
+    const static int framesAveraged = 16;
+    std::array<float, framesAveraged> frameTime = {0};
+    int frameIndex = 0;
+    int framesRecorded = 0;
     while (!done) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
@@ -431,7 +497,20 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             }
             pending_commits.clear();
 
+            struct timeval t1, t2;
+            double elapsedTime;
+
+            // start timer
             future = fb.renderFrame(renderer, camera, world);
+            future.wait();
+            frameTime[frameIndex++] = future.duration();
+            if (frameIndex >= framesAveraged)
+                frameIndex = 0;
+            float totalFrameTime = 0.f;
+            for (int i = 0; i < std::min(framesAveraged, ++framesRecorded); ++i)
+                totalFrameTime += frameTime[i];
+            float avgTime = totalFrameTime / std::min(framesAveraged, framesRecorded);
+            std::cout << "fps: " << 1.0/avgTime << std::endl;
         }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

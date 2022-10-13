@@ -1,4 +1,4 @@
-add_library(ospray_module_example SHARED)
+add_library(ospray_module_tensor_geometry SHARED)
 
 ispc_include_directories(
     ${PROJECT_SOURCE_DIR}/ospray/include
@@ -9,12 +9,18 @@ ispc_include_directories(
     ${EMBREE_INCLUDE_DIRS}
 )
 
-ispc_target_add_sources(ospray_module_example
+ispc_target_add_sources(ospray_module_tensor_geometry
   EllipsoidIntersect.ih
-  example_geometry.cpp
-  example_geometry.ispc
-  example_module_init.cpp
+  ellipsoid.cpp
+  ellipsoid.ispc
+  SuperquadricIntersect.ih
+  superquadric.cpp
+  superquadric.ispc
+  SphericalHarmonicsIntersect.ih
+  SphericalHarmonics.cpp
+  spherical_harmonics.ispc
+  module_init.cpp
 )
 
-target_link_libraries(ospray_module_example PUBLIC
+target_link_libraries(ospray_module_tensor_geometry PUBLIC
     ospray_module_cpu)
