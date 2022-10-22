@@ -327,7 +327,7 @@ struct ortho_frame {
   float closest_dist;
 };
 
-ortho_frame* get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ray_dir)
+ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ray_dir)
 {
     /*
     Produces an orthonormal coordinate frame for the plane that contains the
@@ -347,19 +347,19 @@ ortho_frame* get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f r
         corresponds to ray_dir and the y-axis corresponds to
         ray_origin - glyph_center.
     */
-    struct ortho_frame* frame = new struct ortho_frame;
+    struct ortho_frame frame;
     vec3f offset = ray_origin - glyph_center;
     float ray_dot_offset = dot(ray_dir, offset);
-    frame->closest_dir = offset - ray_dot_offset * ray_dir;
-    frame->closest_dist = length(frame->closest_dir);
-    float inv_closest_dist = 1.0 / frame->closest_dist;
-    frame->closest_dir = frame->closest_dir * inv_closest_dist;
-    frame->frame_to_ray_space.vx = make_vec2f(1.0, -inv_closest_dist * ray_dot_offset);
-    frame->frame_to_ray_space.vy = make_vec2f(0.0, inv_closest_dist);
+    frame.closest_dir = offset - ray_dot_offset * ray_dir;
+    frame.closest_dist = length(frame.closest_dir);
+    float inv_closest_dist = 1.0 / frame.closest_dist;
+    frame.closest_dir = frame.closest_dir * inv_closest_dist;
+    frame.frame_to_ray_space.vx = make_vec2f(1.0, -inv_closest_dist * ray_dot_offset);
+    frame.frame_to_ray_space.vy = make_vec2f(0.0, inv_closest_dist);
     return frame;
 }
 
-float* evaluate_sh_4(float* point, bool evaluate_gradient, bool evaluate_hessian) {
+void evaluate_sh_4(float point[], bool evaluate_gradient, bool evaluate_hessian, float sh[5*15]) {
     /*
     Evaluates spherical harmonics basis functions in bands 0, 2 and 4. For the
     most part, it follows the conventions of "Stupid Spherical Harmonics (SH)
@@ -402,12 +402,12 @@ float* evaluate_sh_4(float* point, bool evaluate_gradient, bool evaluate_hessian
     // This initial part is rather NumPy specific but everything else should be
     // easy to port to other languages
     /* int shape = sizeof(point)/sizeof(point[0]) / 3; */
-    int shape = 5; // TODO undo hardcode
-    float* sh = new float[shape * 15];
+    #define shape 5 // TODO undo hardcode
+    /* float sh[5 * 15]; */
     // For homogenization, we express the associated Legendre polynomials as
     // homogeneous polynomials of the variables z and r = sqrt(x^2 + y^2)
-    float* z_2 = new float[shape];
-    float* r_2 = new float[shape];
+    float z_2[shape];
+    float r_2[shape];
     for (int i = 0; i < shape; ++i) {
       z_2[i] = point[shape*2+i]*point[shape*2+i];
       r_2[i] = point[i]*point[i] + point[shape+i]*point[shape+i];
@@ -415,16 +415,16 @@ float* evaluate_sh_4(float* point, bool evaluate_gradient, bool evaluate_hessian
     // Evaluate the relevant associated Legendre polynomials. At such low degree,
     // the recurrent scheme is not worthwhile. We skip odd bands and constant or
     // linear polynomials.
-    float* legendre_4_0 = new float[shape];
-    float* scaled_legendre_4_1 = new float[shape];
-    float* scaled_legendre_4_2 = new float[shape];
-    float* cosine_2 = new float[shape];
-    float* sine_2 = new float[shape];
-    float* cosine_3 = new float[shape];
-    float* sine_3 = new float[shape];
-    float* cosine_4 = new float[shape];
-    float* sine_4 = new float[shape];
-    float* one_2 = new float[shape];
+    float legendre_4_0[shape];
+    float scaled_legendre_4_1[shape];
+    float scaled_legendre_4_2[shape];
+    float cosine_2[shape];
+    float sine_2[shape];
+    float cosine_3[shape];
+    float sine_3[shape];
+    float cosine_4[shape];
+    float sine_4[shape];
+    float one_2[shape];
     for (int i = 0; i < shape; ++i) {
       legendre_4_0[i] = z_2[i] * (z_2[i] - 3.0*r_2[i]) + 3.0/8.0 * r_2[i] * r_2[i];
       scaled_legendre_4_1[i] = 2.67618617422915667 * point[shape*2+i] * (-z_2[i] + 0.75 * r_2[i]);
@@ -455,13 +455,13 @@ float* evaluate_sh_4(float* point, bool evaluate_gradient, bool evaluate_hessian
       sh[shape+13] = -1.77013076977993053 * cosine_3[i] * point[shape*2+i];
       sh[shape+14] = 0.625835735449176135 * cosine_4[i];
     }
-    if (!evaluate_gradient && !evaluate_hessian)
-      return sh;
+    /* if (!evaluate_gradient && !evaluate_hessian) */
+      /* return sh; */
 }
 
-float* evaluate_sh_4(float* point) { return evaluate_sh_4(point, false, false); }
+void evaluate_sh_4(float point[],  float sh[]) { evaluate_sh_4(point, false, false, sh); }
 
-float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis) {
+float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis, float sh_poly[5]) {
     /*
     Constructs a homogeneous quartic polynomial in the monic basis describing
     the behavior of a linear combination of SH basis functions in bands 0, 2, 4
@@ -478,30 +478,29 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
     // coefficients is fast and numerically stable. See invert_vandermonde().
     const uniform float xs[] = {-pow(0.5,0.25), pow(0.5,0.25), 2.0, 0.0, 1.0};
     const uniform float ys[] = { pow(0.5,0.25), pow(0.5,0.25), 1.0, 1.0, 0.0};
-    float* points = new float[15];
+    float points[15];
     for (uniform int i = 0; i < 3; ++i)
       for (uniform int j = 0; j < 5; ++j)
         points[i*5 + j] = xs[j] * get(x_axis, i) + ys[j] * get(y_axis, i);
 
-    uniform float* shs = evaluate_sh_4(points);
+    float shs[5*15];
+    evaluate_sh_4(points, shs);
     float poly_values[5] = {0};
-    float* poly = new float[5];
     for (uniform int i = 0; i < 5; ++i) {
-      poly[i] = 0;
+      sh_poly[i] = 0;
       for (uniform int j = 0; j < 15; ++j)
         poly_values[i] += shs[j*5 + i] * sh_coeffs[j];
     }
 
     // Construct the polynomial coefficients
-    poly[0] = poly_values[3];
-    poly[4] = poly_values[4];
+    sh_poly[0] = poly_values[3];
+    sh_poly[4] = poly_values[4];
     const uniform float inv_vander[3][5] = {{-2.0 / 3.0, 2.0, -1.0 / 6.0, -0.5, 2.0},
                                             {1.0, 1.0, 0.0, -1.0, -1.0},
                                             {-1.0 / 3.0, -1.0, 1.0 / 6.0, 0.5, -2.0}};
     /* for (uniform int i = 1; i < 4; ++i) */
     /*   for (uniform int j = 0; j < 5; ++j) */
     /*     poly[i] += inv_vander[i+1][j] * poly_values[j]; */
-    return poly;
 }
 
 /* void zroots(float* a, bool polish) { */
@@ -548,16 +547,17 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
 /*     return roots; */
 /* } */
 
-float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame* frame) {
-    float* sh_poly = get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame->closest_dir);
+float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11]) {
+    float sh_poly[5];
+    get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
     // Square this polynomial
     float sh_square[9] = {0};
     for (int i = 0; i < 9; ++i)
       for (int j = max(0, i-4); j < min(4,i)+1; ++j)
         sh_square[i] += sh_poly[j] * sh_poly[i - j];
     // Increase the degree of the polynomial from 8 to 10 assuming y=closest_dist
-    float* poly = new float[11];
-    float inv_dist_sq = 1.0 / frame->closest_dist * frame->closest_dist;
+    //float* poly = new float[11];
+    float inv_dist_sq = 1.0 / frame.closest_dist * frame.closest_dist;
     for (uniform int i = 0; i < 9; ++i)
       poly[i] = inv_dist_sq * sh_square[i];
     poly[9] = poly[10] = 0;
@@ -569,8 +569,6 @@ float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_fram
     poly[6] -= 10.0;
     poly[8] -= 5.0;
     poly[10] -= 1.0;
-
-    return poly;
 }
 
 /* void get_sh_glyph_intersections(float** sh_coeffs, vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) */
@@ -642,8 +640,9 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   vec3f s;
   int stepTotal = 0;
   #if 1
-  struct ortho_frame* frame = get_orthonormal_frame(center, rayOrg, rayDir);
-  float* poly = get_poly(coeffs, rayDir, frame);
+  struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
+  float poly[11];
+  get_poly(coeffs, rayDir, frame, poly);
   vec3f p = cRayOrg + dist * rayDir;
   float io = shFunctions(p, coeffs);
   bool movePos = io > 0;
