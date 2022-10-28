@@ -359,7 +359,7 @@ ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ra
     return frame;
 }
 
-void evaluate_sh_4(float point[], bool evaluate_gradient, bool evaluate_hessian, float sh[5*15]) {
+void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hessian, float sh[5][15]) {
     /*
     Evaluates spherical harmonics basis functions in bands 0, 2 and 4. For the
     most part, it follows the conventions of "Stupid Spherical Harmonics (SH)
@@ -406,11 +406,16 @@ void evaluate_sh_4(float point[], bool evaluate_gradient, bool evaluate_hessian,
     /* float sh[5 * 15]; */
     // For homogenization, we express the associated Legendre polynomials as
     // homogeneous polynomials of the variables z and r = sqrt(x^2 + y^2)
+    /* #define x point[0] */
+    /* float* x = &point[0]; */
+    /* float* y = &point[1]; */
+    /* float* z = &point[2]; */
+
     float z_2[shape];
     float r_2[shape];
     for (int i = 0; i < shape; ++i) {
-      z_2[i] = point[shape*2+i]*point[shape*2+i];
-      r_2[i] = point[i]*point[i] + point[shape+i]*point[shape+i];
+      z_2[i] = point[2][i] * point[2][i];
+      r_2[i] = point[0][i] * point[0][i] + point[1][i] * point[1][i];
     }
     // Evaluate the relevant associated Legendre polynomials. At such low degree,
     // the recurrent scheme is not worthwhile. We skip odd bands and constant or
@@ -427,39 +432,39 @@ void evaluate_sh_4(float point[], bool evaluate_gradient, bool evaluate_hessian,
     float one_2[shape];
     for (int i = 0; i < shape; ++i) {
       legendre_4_0[i] = z_2[i] * (z_2[i] - 3.0*r_2[i]) + 3.0/8.0 * r_2[i] * r_2[i];
-      scaled_legendre_4_1[i] = 2.67618617422915667 * point[shape*2+i] * (-z_2[i] + 0.75 * r_2[i]);
+      scaled_legendre_4_1[i] = 2.67618617422915667 * point[2][i] * (-z_2[i] + 0.75 * r_2[i]);
       scaled_legendre_4_2[i] = 2.83852408727268005 * (z_2[i] - (1.0 / 6.0) * r_2[i]);
       // Evaluate the Fourier basis. Again, we omit constant and linear terms.
-      cosine_2[i] = r_2[i] - 2.0 * point[shape+i] * point[shape+i];
-      sine_2[i] = 2.0 * point[i] * point[shape+i];
-      cosine_3[i] = point[i] * cosine_2[i] - point[shape+i] * sine_2[i];
-      sine_3[i] = point[i] * sine_2[i] + point[shape+i] * cosine_2[i];
-      cosine_4[i] = point[i] * cosine_3[i] - point[shape+i] * sine_3[i];
-      sine_4[i] = point[i] * sine_3[i] + point[shape+i] * cosine_3[i];
+      cosine_2[i] = r_2[i] - 2.0 * point[1][i] * point[1][i];
+      sine_2[i] = 2.0 * point[0][i] * point[1][i];
+      cosine_3[i] = point[0][i] * cosine_2[i] - point[1][i] * sine_2[i];
+      sine_3[i] = point[0][i] * sine_2[i] + point[1][i] * cosine_2[i];
+      cosine_4[i] = point[0][i] * cosine_3[i] - point[1][i] * sine_3[i];
+      sine_4[i] = point[0][i] * sine_3[i] + point[1][i] * cosine_3[i];
       // Assemble the Legendre polynomials and the Fourier basis with appropriate
       // constant factors and homogenize to degree 4 by multiplying one_2 as needed
       one_2[i] = r_2[i] + z_2[i];
-      sh[shape+0] = 0.282094791773878143 * one_2[i] * one_2[i];
-      sh[shape+1] = 0.546274215296039535 * one_2[i] * sine_2[i];
-      sh[shape+2] = -1.09254843059207907 * one_2[i] * point[shape+i] * point[shape*2+i];
-      sh[shape+3] = 0.630783130505040012 * one_2[i] * (z_2[i] - 0.5 * r_2[i]);
-      sh[shape+4] = -1.09254843059207907 * one_2[i] * point[i] * point[shape*2+i];
-      sh[shape+5] = 0.546274215296039535 * one_2[i] * cosine_2[i];
-      sh[shape+6] = 0.625835735449176135 * sine_4[i];
-      sh[shape+7] = -1.77013076977993053 * sine_3[i] * point[shape*2+i];
-      sh[shape+8] = sine_2[i] * scaled_legendre_4_2[i];
-      sh[shape+9] = point[shape+i] * scaled_legendre_4_1[i];
-      sh[shape+10] = 0.846284375321634430 * legendre_4_0[i];
-      sh[shape+11] = point[i] * scaled_legendre_4_1[i];
-      sh[shape+12] = cosine_2[i] * scaled_legendre_4_2[i];
-      sh[shape+13] = -1.77013076977993053 * cosine_3[i] * point[shape*2+i];
-      sh[shape+14] = 0.625835735449176135 * cosine_4[i];
+      sh[i][0] = 0.282094791773878143 * one_2[i] * one_2[i];
+      sh[i][1] = 0.546274215296039535 * one_2[i] * sine_2[i];
+      sh[i][2] = -1.09254843059207907 * one_2[i] * point[1][i] * point[2][i];
+      sh[i][3] = 0.630783130505040012 * one_2[i] * (z_2[i] - 0.5 * r_2[i]);
+      sh[i][4] = -1.09254843059207907 * one_2[i] * point[0][i] * point[2][i];
+      sh[i][5] = 0.546274215296039535 * one_2[i] * cosine_2[i];
+      sh[i][6] = 0.625835735449176135 * sine_4[i];
+      sh[i][7] = -1.77013076977993053 * sine_3[i] * point[2][i];
+      sh[i][8] = sine_2[i] * scaled_legendre_4_2[i];
+      sh[i][9] = point[1][i] * scaled_legendre_4_1[i];
+      sh[i][10] = 0.846284375321634430 * legendre_4_0[i];
+      sh[i][11] = point[0][i] * scaled_legendre_4_1[i];
+      sh[i][12] = cosine_2[i] * scaled_legendre_4_2[i];
+      sh[i][13] = -1.77013076977993053 * cosine_3[i] * point[2][i];
+      sh[i][14] = 0.625835735449176135 * cosine_4[i];
     }
     /* if (!evaluate_gradient && !evaluate_hessian) */
       /* return sh; */
 }
 
-void evaluate_sh_4(float point[],  float sh[]) { evaluate_sh_4(point, false, false, sh); }
+void evaluate_sh_4(float point[3][5],  float sh[5][15]) { evaluate_sh_4(point, false, false, sh); }
 
 float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis, float sh_poly[5]) {
     /*
@@ -478,18 +483,19 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
     // coefficients is fast and numerically stable. See invert_vandermonde().
     const uniform float xs[] = {-pow(0.5,0.25), pow(0.5,0.25), 2.0, 0.0, 1.0};
     const uniform float ys[] = { pow(0.5,0.25), pow(0.5,0.25), 1.0, 1.0, 0.0};
-    float points[15];
+    float points[3][5];
     for (uniform int i = 0; i < 3; ++i)
       for (uniform int j = 0; j < 5; ++j)
-        points[i*5 + j] = xs[j] * get(x_axis, i) + ys[j] * get(y_axis, i);
+        points[i][j] = xs[j] * get(x_axis, i) + ys[j] * get(y_axis, i);
 
-    float shs[5*15];
+    float shs[5][15];
     evaluate_sh_4(points, shs);
     float poly_values[5] = {0};
     for (uniform int i = 0; i < 5; ++i) {
       sh_poly[i] = 0;
+    /* print("shs %d\n", shs[i][0]); */
       for (uniform int j = 0; j < 15; ++j)
-        poly_values[i] += shs[j*5 + i] * sh_coeffs[j];
+        poly_values[i] += shs[i][j] * sh_coeffs[j];
     }
 
     // Construct the polynomial coefficients
@@ -498,9 +504,9 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
     const uniform float inv_vander[3][5] = {{-2.0 / 3.0, 2.0, -1.0 / 6.0, -0.5, 2.0},
                                             {1.0, 1.0, 0.0, -1.0, -1.0},
                                             {-1.0 / 3.0, -1.0, 1.0 / 6.0, 0.5, -2.0}};
-    /* for (uniform int i = 1; i < 4; ++i) */
-    /*   for (uniform int j = 0; j < 5; ++j) */
-    /*     poly[i] += inv_vander[i+1][j] * poly_values[j]; */
+    for (uniform int i = 1; i < 4; ++i)
+      for (uniform int j = 0; j < 5; ++j)
+        sh_poly[i] += inv_vander[i-1][j] * poly_values[j];
 }
 
 /* void zroots(float* a, bool polish) { */
@@ -557,7 +563,7 @@ float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_fram
         sh_square[i] += sh_poly[j] * sh_poly[i - j];
     // Increase the degree of the polynomial from 8 to 10 assuming y=closest_dist
     //float* poly = new float[11];
-    float inv_dist_sq = 1.0 / frame.closest_dist * frame.closest_dist;
+    float inv_dist_sq = 1.0 / (frame.closest_dist * frame.closest_dist);
     for (uniform int i = 0; i < 9; ++i)
       poly[i] = inv_dist_sq * sh_square[i];
     poly[9] = poly[10] = 0;
@@ -600,15 +606,16 @@ float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_fram
 /*     return ray_roots[0] / ray_roots[1]; */
 /* } */
 
-float eval_poly(float* poly, float t) {
+float eval_poly(float poly[11], float t) {
   float y = 0.f;
   uniform int degree = 10; // TODO undo hardcode
   float t_pow = t;
-  for (uniform int i = degree-1; i >= 0; --i) {
+  y += poly[0];
+  for (uniform int i = 1; i < degree+1; ++i) {
     y += poly[i] * t_pow;
     t_pow *= t;
   }
-  y += poly[degree];
+  //y += poly[degree];
   return y;
 }
 
@@ -655,7 +662,9 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
       movePos = !movePos;
     }
     /* print("%i,%i,%i,%i\n", coeffs[0], coeffs[1], coeffs[2], coeffs[3]); */
-    io = eval_poly(coeffs, dist);
+    vec2f r = frame.frame_to_ray_space * make_vec2f(dist,1);
+    float t = r.x / r.y;
+    io = eval_poly(poly, t);
     /* io = shFunctions(p, coeffs); */
     dist += step_size;
     }
@@ -693,8 +702,8 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     isect.entry.u = shFunctions(p, coeffs);
   }
   #endif
-  /* isect.entry.hit = abs(io) < EPSILON; */
-  isect.entry.hit = true;
+  isect.entry.hit = abs(io) < EPSILON;
+  /* isect.entry.hit = true; */
   isect.entry.t = dist;
   isect.entry.N = normalize(SHGradient(p, coeffs));
   isect.entry.u = (float)stepTotal/(float)STEPS_;
@@ -702,3 +711,24 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   return isect;
 }
 
+void testPolyGen()
+{
+  uniform vec3f ray_origin = make_vec3f(-4.0, 2.0, 1.0);
+  uniform vec3f ray_dir = normalize(make_vec3f(0.3, 0.6, 0.2) - ray_origin);
+  uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
+
+  uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
+
+  struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
+  print("closest dir %d\n", frame.frame_to_ray_space.vy.x);
+
+  float sh_poly[5];
+  get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
+  float poly[11];
+  get_poly(sh_coeffs, ray_dir, frame, poly);
+  for (uniform int i = 0; i < 5; ++i)
+      print("%d",sh_poly[i]);
+  print(",,,,");
+  for (uniform int i = 0; i < 11; ++i)
+      print("%d",poly[i]);
+}

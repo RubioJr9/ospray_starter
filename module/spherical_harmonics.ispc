@@ -160,3 +160,7 @@ export void *uniform SphericalHarmonics_postIntersect_addr()
   return SphericalHarmonics_postIntersect;
 }
 
+export void SphericalHarmonics_tests()
+{
+    testPolyGen();
+}

@@ -43,6 +43,7 @@ namespace tensor_geometry {
         getSh()->boundRadius = new float[vertexData->size()];
 
         postCreationInfo();
+        ispc::SphericalHarmonics_tests();
     }
 
     size_t SphericalHarmonics::numPrimitives() const
