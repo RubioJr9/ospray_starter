@@ -199,6 +199,7 @@ struct complex plus(struct complex& a, float b)
 {
   complex c;
   c.real = a.real + b;
+  c.imaginary = a.imaginary;
   return c;
 }
 
@@ -214,6 +215,7 @@ struct complex minus(struct complex& a, float b)
 {
   complex c;
   c.real = a.real - b;
+  c.imaginary = a.imaginary;
   return c;
 }
 
@@ -254,8 +256,8 @@ struct complex divide(float a, struct complex& b)
 {
   struct complex ret;
   float denom = (b.real*b.real+b.imaginary*b.imaginary);
-  ret.real = (a*b.real + b.imaginary) / denom;
-  ret.imaginary = (b.real - a*b.imaginary) / denom;
+  ret.real = (a*b.real) / denom;
+  ret.imaginary = (-a*b.imaginary) / denom;
   return ret;
 }
 
@@ -711,8 +713,80 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   return isect;
 }
 
+bool assertEqual(struct complex& res, struct complex& expected, float epsilon) {
+  assert(abs(res.real-expected.real) < epsilon);
+  assert(abs(res.imaginary-expected.imaginary) < epsilon);
+}
+
+void testComplexMath()
+{
+  struct complex a, b, expected;
+  a.real = 3.2;
+  a.imaginary = 2.9;
+  b.real = 1.7;
+  b.imaginary = 7.6;
+  expected.real = 4.9;
+  expected.imaginary = 10.5;
+
+  struct complex res = plus(a, b);
+  assertEqual(res, expected, 1.0e-16);
+
+  res = plus(a, b.real);
+  expected.imaginary = a.imaginary;
+  assertEqual(res, expected, 1.0e-16);
+
+  res = minus(a, b);
+  expected.real = 1.5;
+  expected.imaginary = -4.7;
+  assertEqual(res, expected, 1.0e-16);
+
+  res = minus(a, b.real);
+  expected.imaginary = a.imaginary;
+  assertEqual(res, expected, 1.0e-16);
+
+  res = times(a, b);
+  expected.real = -16.6;
+  expected.imaginary = 29.25;
+  assertEqual(res, expected, 1.0e-16);
+
+  res = times(a, b.real);
+  expected.real = 5.44;
+  expected.imaginary = 4.93;
+  assertEqual(res, expected, 1.0e-6);
+
+  res = conj(a);
+  expected.real = a.real;
+  expected.imaginary = -a.imaginary;
+  assertEqual(res, expected, 1.0e-16);
+
+  res = divide(a, b);
+  expected.real = 0.45309150865622423742786479802143446001648804616;
+  expected.imaginary = -0.3197032151690024732069249793899422918384171475;
+  assertEqual(res, expected, 1.0e-7);
+
+  res = divide(a.real, b);
+  expected.real = 0.08969497114591920857378400659521846661170651277;
+  expected.imaginary = -0.4009892827699917559769167353668590272052761747;
+  assertEqual(res, expected, 1.0e-8);
+
+  float absRes = abs(a);
+  float absExpected = 4.31856457633783681736543127297124342394929;
+  assert(abs(absRes-absExpected) < 1.0e-6);
+
+  res = sqrt(a);
+  expected.real = 1.9388868683264937747198454519510440355532917532;
+  expected.imaginary = 0.747851782219524037073515212692618569187849779814;
+  assertEqual(res, expected, 1.0e-6);
+
+  /* res = complex polar(float r, float theta); */
+  /* expected.real = 1.9388868683264937747198454519510440355532917532; */
+  /* expected.imaginary = 0.747851782219524037073515212692618569187849779814; */
+  /* assertEqual(res, expected, 1.0e-6); */
+}
+
 void testPolyGen()
 {
+  testComplexMath();
   uniform vec3f ray_origin = make_vec3f(-4.0, 2.0, 1.0);
   uniform vec3f ray_dir = normalize(make_vec3f(0.3, 0.6, 0.2) - ray_origin);
   uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
@@ -720,15 +794,13 @@ void testPolyGen()
   uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
 
   struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
-  print("closest dir %d\n", frame.frame_to_ray_space.vy.x);
 
   float sh_poly[5];
   get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
   float poly[11];
   get_poly(sh_coeffs, ray_dir, frame, poly);
-  for (uniform int i = 0; i < 5; ++i)
-      print("%d",sh_poly[i]);
-  print(",,,,");
-  for (uniform int i = 0; i < 11; ++i)
-      print("%d",poly[i]);
+
+  uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.};
+  for (int i = 0; i < 11; ++i)
+    assert(abs(poly[i] - poly_expected[i]) < 0.01);
 }
