@@ -525,17 +525,16 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
         sh_poly[i] += inv_vander[i-1][j] * poly_values[j];
 }
 
-void zroots(float a[11], float roots[11], bool polish) {
+void zroots(float a[11], complex roots[11], bool polish) {
     float EPS = 1.0e-14;
     const int m = 10;
     complex x = {0,0};
     complex b = {0,0};
     complex c = {0,0};
-    complex c_roots[11];
     // default root values need to avoid stopping criteria(imag == 0 in our case)
     for (int i = 0; i < 11; ++i) {
-      c_roots[i].real = 1e16;
-      c_roots[i].imaginary = 1e16;
+      roots[i].real = 1e16;
+      roots[i].imaginary = 1e16;
     }
     complex a_complex[11];
     complex ad[11];
@@ -551,7 +550,7 @@ void zroots(float a[11], float roots[11], bool polish) {
       laguer(ad, x, j+2);
       if (abs(x.imaginary) <= 2.0*EPS*abs(x.real))
         x.imaginary = 0.0;
-      c_roots[j] = x;
+      roots[j] = x;
       b = ad[j+1]; // forward deflation
       for (int jj = j; jj > -1; --jj) {
         c = ad[jj];
@@ -563,21 +562,21 @@ void zroots(float a[11], float roots[11], bool polish) {
     // polish roots using undeflated coefficients
     if (polish)
         for (uniform int j = 0; j < 11; ++j)
-            laguer(a_complex, c_roots[j], 11);
+            laguer(a_complex, roots[j], 11);
     // sort roots by real parts by straight insertion
     for (int j = 1; j < m; ++j) {
-      x = c_roots[j];
+      x = roots[j];
       int i = j-1;
       while (i >= 0) {
-        if (c_roots[i].real <= x.real)
+        if (roots[i].real <= x.real)
           break;
-        c_roots[i+1] = c_roots[i];
+        roots[i+1] = roots[i];
         i -= 1;
       }
-      c_roots[i+1] = x;
+      roots[i+1] = x;
     }
-    for (int i = 0; i < 11; ++i)
-      roots[i] = c_roots[i].real;
+    /* for (int i = 0; i < 11; ++i) */
+    /*   roots[i] = c_roots[i].real; */
 }
 
 float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11]) {
@@ -808,6 +807,22 @@ void testComplexMath()
   /* assertEqual(res, expected, 1.0e-6); */
 }
 
+void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame) {
+  for (int i = 0; i < 11; ++i) {
+    vec2f v = make_vec2f(roots[i].real, 1.0);
+    v = frame.frame_to_ray_space * v;
+    ray_roots[i] = v.x / v.y;
+  }
+}
+
+void filterRealRoots(complex roots[11], float ray_roots[11], float real_ray_roots[11]) {
+  int index = 0;
+  for (int i = 0; i < 10; ++i) {
+    if (abs(roots[i].imaginary) < 1.0e-5)
+      real_ray_roots[index++] = ray_roots[i];
+  }
+}
+
 void testPolyGen()
 {
   testComplexMath();
@@ -841,21 +856,25 @@ void testPolyGen()
   laguer(a, x, 11);
   assert(abs(x.real - 0.258963461279) < 1e-5);
 
-  float roots[11];
+  complex roots[11];
   uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
 
   zroots(poly, roots, true);
 
   for (int i = 0; i < 10; ++i)
-    assert(abs(roots[i] - roots_expected[i]) < 1.0e-5);
+    assert(abs(roots[i].real - roots_expected[i]) < 1.0e-5);
 
   float ray_roots[11];
-  for (int i = 0; i < 11; ++i) {
-    vec2f v = make_vec2f(roots[i], 1.0);
-    v = frame.frame_to_ray_space * v;
-    ray_roots[i] = v.x / v.y;
-  }
+  rootsToRaySpace(roots, ray_roots, frame);
+
   uniform float ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.76207239, 4.76207239, 4.92441215, 5.02357046, 5.14509877, 5.50665087, 5.50665087};
   for (uniform int i = 0; i < 10; ++i)
     assert(abs(ray_roots[i] - ray_roots_expected[i]) < 1.0e-5);
+
+  float real_ray_roots[11];
+  filterRealRoots(roots, ray_roots, real_ray_roots);
+
+  uniform float real_ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.92441215, 5.02357046, 5.14509877};
+  for (uniform int i = 0; i < 6; ++i)
+    assert(abs(real_ray_roots[i] - real_ray_roots_expected[i]) < 1.0e-5);
 }
