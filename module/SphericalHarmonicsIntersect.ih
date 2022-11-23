@@ -187,7 +187,7 @@ float real;
 float imaginary;
 };
 
-struct complex plus(struct complex& a, struct complex& b)
+struct complex plus(const struct complex& a, const struct complex& b)
 {
   complex c;
   c.real = a.real + b.real;
@@ -195,7 +195,7 @@ struct complex plus(struct complex& a, struct complex& b)
   return c;
 }
 
-struct complex plus(struct complex& a, float b)
+struct complex plus(const struct complex& a, float b)
 {
   complex c;
   c.real = a.real + b;
@@ -203,7 +203,7 @@ struct complex plus(struct complex& a, float b)
   return c;
 }
 
-struct complex minus(struct complex& a, struct complex& b)
+struct complex minus(const struct complex& a, const struct complex& b)
 {
   complex c;
   c.real = a.real - b.real;
@@ -211,7 +211,7 @@ struct complex minus(struct complex& a, struct complex& b)
   return c;
 }
 
-struct complex minus(struct complex& a, float b)
+struct complex minus(const struct complex& a, float b)
 {
   complex c;
   c.real = a.real - b;
@@ -219,7 +219,7 @@ struct complex minus(struct complex& a, float b)
   return c;
 }
 
-struct complex times(struct complex& a, struct complex& b)
+struct complex times(const struct complex& a, const struct complex& b)
 {
   complex c;
   c.real = a.real * b.real - a.imaginary * b.imaginary;
@@ -227,7 +227,7 @@ struct complex times(struct complex& a, struct complex& b)
   return c;
 }
 
-struct complex times(struct complex& a, float b)
+struct complex times(const struct complex& a, float b)
 {
   complex c;
   c.real = a.real * b;
@@ -243,7 +243,7 @@ struct complex conj(const struct complex& a)
   return b;
 }
 
-struct complex divide(struct complex& a, struct complex& b)
+struct complex divide(const struct complex& a, const struct complex& b)
 {
   struct complex ret;
   float denom = (b.real*b.real+b.imaginary*b.imaginary);
@@ -252,7 +252,7 @@ struct complex divide(struct complex& a, struct complex& b)
   return ret;
 }
 
-struct complex divide(float a, struct complex& b)
+struct complex divide(float a, const struct complex& b)
 {
   struct complex ret;
   float denom = (b.real*b.real+b.imaginary*b.imaginary);
@@ -261,12 +261,12 @@ struct complex divide(float a, struct complex& b)
   return ret;
 }
 
-float abs(struct complex& a)
+float abs(const struct complex& a)
 {
   return sqrt(a.real*a.real+a.imaginary*a.imaginary);
 }
 
-struct complex sqrt(struct complex& a)
+struct complex sqrt(const struct complex& a)
 {
   float z = abs(a);
   complex c;
@@ -279,32 +279,47 @@ inline struct complex polar(float r, float theta) {
   struct complex ret = {r * cos(theta), r * sin(theta)};
   return ret;
 }
-inline struct complex laguer(const uniform float* a, float x0, int its)
+
+// length can be less than 10
+inline void laguer(const complex a[11], struct complex& x, int length)
 {
   const static int MR = 8;
   const static int MT = 10;
   const static int MAXIT = MR*MT;
-  const static float EPS = 1.0e-16;
+  const static float EPS = 1.0e-6;
   const float frac[9] = {0.0, 0.5, 0.25, 0.75, 0.13, 0.38, 0.62, 0.88, 1.0};
 
-  struct complex dx, x, x1, b, d, f, g, h, sq, gp, gm, g2 = {0.f, 0.f};
-  x.real = x.imaginary = 0.f;
-  const int m = 14; // number of coefficients minus 1
+  complex dx = {0.f, 0.f};
+  complex x1 = {0.f, 0.f};
+  complex b = {0.f, 0.f};
+  complex d = {0.f, 0.f};
+  complex f = {0.f, 0.f};
+  complex g = {0.f, 0.f};
+  complex h = {0.f, 0.f};
+  complex sq = {0.f, 0.f};
+  complex gp = {0.f, 0.f};
+  complex gm = {0.f, 0.f};
+  complex g2 = {0.f, 0.f};
+  const int m = length-1; // number of coefficients minus 1
 
-  for (int iter = 1; iter < MAXIT; iter++) {
-    its = iter;
-    b.real = a[m];
+  for (int iter = 1; iter < MAXIT+1; iter++) {
+    b = a[m];
     float err = abs(b);
     float abx = abs(x);
-    for(int j=m-1; j>=0; j--) {
+    d.real = 0;
+    d.imaginary = 0;
+    f.real = 0;
+    f.imaginary = 0;
+    for(int j=m-1; j > -1; j--) {
       f = plus(times(x,f), d);
       d = plus(times(x,d), b);
-      b = plus(times(x,b), a[j]);
+      complex a_val = a[j];
+      b = plus(times(x,b), a_val);
       err = abs(b) + abx*err;
     }
     err *= EPS;
 
-    if (abs(b) <= err) return x; // TODO how to compare complex and real?
+    if (abs(b) <= err) return;
     g = divide(d,b);
     g2 = times(g,g);
     h = minus(g2, times(divide(f,b), 2.f));
@@ -316,11 +331,10 @@ inline struct complex laguer(const uniform float* a, float x0, int its)
     if (abp < abm) gp=gm;
     dx = max(abp, abm) > 0.f ? divide(m, gp) : polar(1.f+abx, (float)iter);
     x1 = minus(x, dx);
-    if (x.real == x1.real) return x; // TODO is it fine to only check real?
+    if (x.real == x1.real && x.imaginary == x1.imaginary) return;
     if (iter % MT != 0) x = x1;
-    else x = minus(x, times(dx, frac[iter/MT]));
+    else x = minus(x, times(dx, frac[(int)(iter/MT)]));
   }
-  return x;
 }
 
 struct ortho_frame {
@@ -356,8 +370,8 @@ ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ra
     frame.closest_dist = length(frame.closest_dir);
     float inv_closest_dist = 1.0 / frame.closest_dist;
     frame.closest_dir = frame.closest_dir * inv_closest_dist;
-    frame.frame_to_ray_space.vx = make_vec2f(1.0, -inv_closest_dist * ray_dot_offset);
-    frame.frame_to_ray_space.vy = make_vec2f(0.0, inv_closest_dist);
+    frame.frame_to_ray_space.vx = make_vec2f(1.0, 0.0);
+    frame.frame_to_ray_space.vy = make_vec2f(-inv_closest_dist * ray_dot_offset, inv_closest_dist);
     return frame;
 }
 
@@ -511,49 +525,60 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
         sh_poly[i] += inv_vander[i-1][j] * poly_values[j];
 }
 
-/* void zroots(float* a, bool polish) { */
-/*     float EPS = 1.0e-14; */
-/*     int m = length(a)-1; */
-/*     struct complex x, b, c = {0,0}; */
-/*     // default root values need to avoid stopping criteria(imag == 0 in our case) */
-/*     struct complex roots[m+1] {1e16, 1e16}; */
-/*     /\* roots = np.full(m+1, complex(np.finfo(np.double).max,np.finfo(np.double).max), dtype=np.cdouble); *\/ */
-/*     struct complex ad[length(a)]; */
-/*     for (int i = 0; i < length(a); ++i) */
-/*       ad[i] = a[i]; */
-/*     /\* ad = np.copy(a); // copy of coefficients for successive deflation *\/ */
-/*     /\* for j in range(m-1, -1, -1): // loop over each root to be found *\/ */
-/*     for (int j = m-1; j > -1; --j) { // loop over each root to be found */
-/*         float x = 0.0; // start at zero to favor convergence to smallest remaining root */
-/*         float ad_v[j+2]; */
-/*         for (int i = 0; i <j+2; ++i) */
-/*           ad_v[i] = ad_[i]; */
-/*         x, = laguer(ad_v, x); */
-/*         if (abs(np.imag(x)) <= 2.0*EPS*abs(np.real(x))): */
-/*             x = complex(np.real(x), 0.0); */
-/*         roots[j] = x; */
-/*         b = ad[j+1]; // forward deflation */
-/*         for jj in range(j, -1, -1): */
-/*             c = ad[jj]; */
-/*             ad[jj] = b; */
-/*             b = x*b+c; */
+void zroots(float a[11], float roots[11], bool polish) {
+    float EPS = 1.0e-14;
+    const int m = 10;
+    complex x = {0,0};
+    complex b = {0,0};
+    complex c = {0,0};
+    complex c_roots[11];
+    // default root values need to avoid stopping criteria(imag == 0 in our case)
+    for (int i = 0; i < 11; ++i) {
+      c_roots[i].real = 1e16;
+      c_roots[i].imaginary = 1e16;
+    }
+    complex a_complex[11];
+    complex ad[11];
+    for (int i = 0; i < 11; ++i) {
+      ad[i].real = a[i];
+      ad[i].imaginary = 0;
+      a_complex[i].real = a[i];
+      a_complex[i].imaginary = 0;
+    }
+    for (int j = m-1; j > -1; --j) { // loop over each root to be found
+      x.real = 0.0;
+      x.imaginary = 0.0; // start at zero to favor convergence to smallest remaining root
+      laguer(ad, x, j+2);
+      if (abs(x.imaginary) <= 2.0*EPS*abs(x.real))
+        x.imaginary = 0.0;
+      c_roots[j] = x;
+      b = ad[j+1]; // forward deflation
+      for (int jj = j; jj > -1; --jj) {
+        c = ad[jj];
+        ad[jj] = b;
+        b = plus(times(x,b),c);
+      }
+    }
 
-/*     // polish roots using undeflated coefficients */
-/*     if (polish): */
-/*         for j in range(m): */
-/*             x, its = laguer(a, roots[j]); */
-/*     // sort roots by real parts by straight insertion */
-/*     for j in range(1, m, 1): */
-/*         x = roots[j]; */
-/*         i = j-1; */
-/*         while (i >= 0): */
-/*             if (np.real(roots[i]) <= np.real(x)): */
-/*                 break; */
-/*             roots[i+1] = roots[i]; */
-/*             i -= 1; */
-/*         roots[i+1] = x; */
-/*     return roots; */
-/* } */
+    // polish roots using undeflated coefficients
+    if (polish)
+        for (uniform int j = 0; j < 11; ++j)
+            laguer(a_complex, c_roots[j], 11);
+    // sort roots by real parts by straight insertion
+    for (int j = 1; j < m; ++j) {
+      x = c_roots[j];
+      int i = j-1;
+      while (i >= 0) {
+        if (c_roots[i].real <= x.real)
+          break;
+        c_roots[i+1] = c_roots[i];
+        i -= 1;
+      }
+      c_roots[i+1] = x;
+    }
+    for (int i = 0; i < 11; ++i)
+      roots[i] = c_roots[i].real;
+}
 
 float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11]) {
     float sh_poly[5];
@@ -564,12 +589,10 @@ float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_fram
       for (int j = max(0, i-4); j < min(4,i)+1; ++j)
         sh_square[i] += sh_poly[j] * sh_poly[i - j];
     // Increase the degree of the polynomial from 8 to 10 assuming y=closest_dist
-    //float* poly = new float[11];
     float inv_dist_sq = 1.0 / (frame.closest_dist * frame.closest_dist);
     for (uniform int i = 0; i < 9; ++i)
       poly[i] = inv_dist_sq * sh_square[i];
     poly[9] = poly[10] = 0;
-    /* poly = np.concatenate([(1.0 / (frame->closest_dist * frame->closest_dist)) * sh_square, [0.0, 0.0]]) */
     // Subtract (x^2+y^2)^5 (which can be computed using the binomial theorem)
     poly[0] -= 1.0;
     poly[2] -= 5.0;
@@ -598,7 +621,8 @@ float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_fram
 
 /*     // Numpy does not have a handy function to compute roots for many polynomials */
 /*     // in an array at once, hence I lost my motivation to vectorize things */
-/*     float* roots = zroots(poly, True); */
+/*     float roots[11];
+/*     zroots(poly, roots, true); */
 /*     // Transform back to ray coordinates. We could have worked in global */
 /*     // coordinates directly but this approach ought to be more stable. */
 /*     float* ray_roots[length(roots)]; */
@@ -767,7 +791,7 @@ void testComplexMath()
   res = divide(a.real, b);
   expected.real = 0.08969497114591920857378400659521846661170651277;
   expected.imaginary = -0.4009892827699917559769167353668590272052761747;
-  assertEqual(res, expected, 1.0e-8);
+  assertEqual(res, expected, 1.0e-7);
 
   float absRes = abs(a);
   float absExpected = 4.31856457633783681736543127297124342394929;
@@ -794,6 +818,10 @@ void testPolyGen()
   uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
 
   struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
+  assert(abs(frame.frame_to_ray_space.vx.x-1) < 1e-2);
+  assert(abs(frame.frame_to_ray_space.vx.y-0) < 1e-2);
+  assert(abs(frame.frame_to_ray_space.vy.x-13.21034026) < 1e-2);
+  assert(abs(frame.frame_to_ray_space.vy.y-2.73521048) < 1e-2);
 
   float sh_poly[5];
   get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
@@ -803,4 +831,31 @@ void testPolyGen()
   uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.};
   for (int i = 0; i < 11; ++i)
     assert(abs(poly[i] - poly_expected[i]) < 0.01);
+
+  complex a[11];
+  for (int i = 0; i < 11; ++i) {
+    a[i].real = poly[i];
+    a[i].imaginary = 0;
+  }
+  complex x = {0,0};
+  laguer(a, x, 11);
+  assert(abs(x.real - 0.258963461279) < 1e-5);
+
+  float roots[11];
+  uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
+
+  zroots(poly, roots, true);
+
+  for (int i = 0; i < 10; ++i)
+    assert(abs(roots[i] - roots_expected[i]) < 1.0e-5);
+
+  float ray_roots[11];
+  for (int i = 0; i < 11; ++i) {
+    vec2f v = make_vec2f(roots[i], 1.0);
+    v = frame.frame_to_ray_space * v;
+    ray_roots[i] = v.x / v.y;
+  }
+  uniform float ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.76207239, 4.76207239, 4.92441215, 5.02357046, 5.14509877, 5.50665087, 5.50665087};
+  for (uniform int i = 0; i < 10; ++i)
+    assert(abs(ray_roots[i] - ray_roots_expected[i]) < 1.0e-5);
 }
