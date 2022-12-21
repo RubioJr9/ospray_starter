@@ -6,8 +6,8 @@
 #include "rkcommon/math/vec.ih"
 #include "math/AffineSpace.ih"
 
-const uniform float EPSILON = 0.001;
-const int STEPS_ = 700;
+const uniform float EPSILON = 1e-3;
+const int STEPS_ = 70;
 
 float sign(float v)
 {
@@ -161,6 +161,139 @@ float SH(int l, int m, vec3f n) {
   if (l==4 && m== 4) return  k17*n.x*n.x*(n.x*n.x-3.f*n.y*n.y)-n.y*n.y*(3.f*n.x*n.x-n.y*n.y);
   //----------------------------------------------------------
   return 0.0;
+}
+
+vec3f get_sh_glyph_normal(uniform float* sh_coeffs, varying vec3f point){
+    /* Computes a unit normal vector for a spherical harmonics glyph. */
+    /* :param sh_coeffs: Spherical harmonics coefficients for bands 0, 2 and 4. See */
+    /*     evaluate_sh_4() for their order. Array of shape (15, ...). */
+    /* :param point: The position on the glyph at which the normal should be */
+    /*     evaluated, relative to the glyph center. Shape (3, ...). */
+    /* :return: The normalized normal vector. Shape (3, ...). */
+    /* sh, gradient = evaluate_sh_4(offset, True); */
+
+    float z_2 = point.z * point.z;
+    float r_2 = point.x * point.x + point.y * point.y;
+    // Evaluate the relevant associated Legendre polynomials. At such low degree,
+    // the recurrent scheme is not worthwhile. We skip odd bands and constant or
+    // linear polynomials.
+    float legendre_4_0 = z_2 * (z_2 - 3.0*r_2) + 3.0/8.0 * r_2 * r_2;
+    float scaled_legendre_4_1 = 2.67618617422915667 * point.z * (-z_2 + 0.75 * r_2);
+    float scaled_legendre_4_2 = 2.83852408727268005 * (z_2 - (1.0 / 6.0) * r_2);
+      // Evaluate the Fourier basis. Again, we omit constant and linear terms.
+    float cosine_2 = r_2 - 2.0 * point.y * point.y;
+    float sine_2 = 2.0 * point.x * point.y;
+    float cosine_3 = point.x * cosine_2 - point.y * sine_2;
+    float sine_3 = point.x * sine_2 + point.y * cosine_2;
+    float cosine_4 = point.x * cosine_3 - point.y * sine_3;
+    float sine_4 = point.x * sine_3 + point.y * cosine_3;
+      // Assemble the Legendre polynomials and the Fourier basis with appropriate
+      // constant factors and homogenize to degree 4 by multiplying one_2 as needed
+    float one_2 = r_2 + z_2;
+    float sh[] = {0.282094791773878143 * one_2 * one_2,
+                  0.546274215296039535 * one_2 * sine_2,
+                  -1.09254843059207907 * one_2 * point.y * point.z,
+                  0.630783130505040012 * one_2 * (z_2 - 0.5 * r_2),
+                  -1.09254843059207907 * one_2 * point.x * point.z,
+                  0.546274215296039535 * one_2 * cosine_2,
+                  0.625835735449176135 * sine_4,
+                  -1.77013076977993053 * sine_3 * point.z,
+                  sine_2 * scaled_legendre_4_2,
+                  point.y * scaled_legendre_4_1,
+                   0.846284375321634430 * legendre_4_0,
+                   point.x * scaled_legendre_4_1,
+                   cosine_2 * scaled_legendre_4_2,
+                   -1.77013076977993053 * cosine_3 * point.z,
+                   0.625835735449176135 * cosine_4};
+
+    float poly_value = 0;
+    for (uniform int i = 0; i < 15; ++i)
+      poly_value += sh[i] * sh_coeffs[i];
+
+    // Prepare a few common subexpressions. Many of them are linear in
+    // x^2, y^2, z^2 and named by the corresponding factors. a, b, c are
+    // various literals, m is -1.
+    float xa3_ya1_za1 = 1.09254843059207907 * (one_2 + 2.0 * point.x * point.x);
+    float xa1_ya3_za1 = 1.09254843059207907 * (one_2 + 2.0 * point.y * point.y);
+    float xa1_ya1_za3 = 1.09254843059207907 * (one_2 + 2.0 * z_2);
+    float xb1_yb1_zb1 = 1.128379167095512574 * one_2;
+    float xc2_yc2_zcm1 = -1.26156626101008002 * (r_2 - 0.5 * z_2);
+    float x1_y1_zm4 = r_2 - 4.0 * z_2;
+    float xyz = point.x * point.y * point.z;
+    float cosine_2_z = cosine_2 * point.z;
+    // Assemble the pieces to get the gradients. This is mostly just using
+    // the product rule but there is a lot of manual optimization on top of
+    // that. The gradient should be homogeneous of degree 3.
+    float gradient[3][15];
+    gradient[0][0] = xb1_yb1_zb1 * point.x;
+    gradient[1][0] = xb1_yb1_zb1 * point.y;
+    gradient[2][0] = xb1_yb1_zb1 * point.z;
+
+    gradient[0][1] = point.y * xa3_ya1_za1;
+    gradient[1][1] = point.x * xa1_ya3_za1;
+    gradient[2][1] = 2.18509686118415814 * xyz;
+
+    gradient[0][2] = -gradient[2][1];
+    gradient[1][2] = -point.z * xa1_ya3_za1;
+    gradient[2][2] = -point.y * xa1_ya1_za3;
+
+    gradient[0][3] = point.x * xc2_yc2_zcm1;
+    gradient[1][3] = point.y * xc2_yc2_zcm1;
+    gradient[2][3] = 0.630783130505040012 * point.z * (r_2 + 4.0 * z_2);
+
+    gradient[0][4] = -point.z * xa3_ya1_za1;
+    gradient[1][4] = -gradient[2][1];
+    gradient[2][4] = -point.x * xa1_ya1_za3;
+
+    gradient[0][5] = 1.09254843059207907 * point.x * (cosine_2 + one_2);
+    gradient[1][5] = 1.09254843059207907 * point.y * (cosine_2 - one_2);
+    gradient[2][5] = 1.09254843059207907 * point.z * cosine_2;
+
+    gradient[0][6] = 2.50334294179670454 * sine_3;
+    gradient[1][6] = 2.50334294179670454 * cosine_3;
+    gradient[2][6] = 0.0;
+
+    gradient[0][7] = -10.6207846186795827 * xyz;
+    gradient[1][7] = -5.31039230933979159 * cosine_2_z;
+    gradient[2][7] = -1.77013076977993053 * sine_3;
+
+    gradient[0][8] = 0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);
+    gradient[1][8] = 0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);
+    gradient[2][8] = 11.35409634909072096 * xyz;
+
+    gradient[0][9] = 4.014279261343735008 * xyz;
+    gradient[1][9] = 1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);
+    gradient[2][9] = 2.007139630671867504 * x1_y1_zm4 * point.y;
+
+    gradient[0][10] = 1.269426562982451646 * x1_y1_zm4 * point.x;
+    gradient[1][10] = 1.269426562982451646 * x1_y1_zm4 * point.y;
+    gradient[2][10] = -5.077706251929806583 * point.z * (r_2 - (2.0 / 3.0) * z_2);
+
+    gradient[0][11] = 1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);
+    gradient[1][11] = gradient[0][9];
+    gradient[2][11] = 2.007139630671867504 * x1_y1_zm4 * point.x;
+
+    gradient[0][12] = 5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);
+    gradient[1][12] = -5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);
+    gradient[2][12] = 5.677048174545360109 * cosine_2_z;
+
+    gradient[0][13] = gradient[1][7];
+    gradient[1][13] = -gradient[0][7];
+    gradient[2][13] = -1.77013076977993053 * cosine_3;
+
+    gradient[0][14] = gradient[1][6];
+    gradient[1][14] = -gradient[0][6];
+    gradient[2][14] = 0.0;
+
+    vec3f poly_gradient = make_vec3f(0,0,0);
+    for (int j = 0; j < 15; ++j) {
+      poly_gradient.x += gradient[0][j] * sh_coeffs[j];
+      poly_gradient.y += gradient[1][j] * sh_coeffs[j];
+      poly_gradient.z += gradient[2][j] * sh_coeffs[j];
+    }
+    float length_2 = point.x*point.x + point.y*point.y + point.z*point.z;
+    vec3f normal = length_2 * poly_gradient - 5.0 * poly_value * point;
+    return normalize(normal);
 }
 
 vec3f SHGradient(varying vec3f p,
@@ -375,6 +508,24 @@ ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ra
     return frame;
 }
 
+void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame) {
+  for (int i = 0; i < 11; ++i) {
+    vec2f v = make_vec2f(roots[i].real, 1.0);
+    v = frame.frame_to_ray_space * v;
+    ray_roots[i] = v.x / v.y;
+  }
+}
+
+void filterRealRoots(complex roots[11], float ray_roots[11], float real_ray_roots[11]) {
+  int index = 0;
+  for (int i = 0; i < 11; ++i) {
+    if (abs(roots[i].imaginary) < 1.0e-5)
+      real_ray_roots[index++] = ray_roots[i];
+  }
+  for (int i = index; i < 11; ++i)
+    real_ray_roots[i] = 0;
+}
+
 void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hessian, float sh[5][15]) {
     /*
     Evaluates spherical harmonics basis functions in bands 0, 2 and 4. For the
@@ -527,24 +678,24 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
 
 void zroots(float a[11], complex roots[11], bool polish) {
     float EPS = 1.0e-14;
-    const int m = 10;
+    const uniform int m = 10;
     complex x = {0,0};
     complex b = {0,0};
     complex c = {0,0};
     // default root values need to avoid stopping criteria(imag == 0 in our case)
-    for (int i = 0; i < 11; ++i) {
+    for (uniform int i = 0; i < 11; ++i) {
       roots[i].real = 1e16;
       roots[i].imaginary = 1e16;
     }
     complex a_complex[11];
     complex ad[11];
-    for (int i = 0; i < 11; ++i) {
+    for (uniform int i = 0; i < 11; ++i) {
       ad[i].real = a[i];
       ad[i].imaginary = 0;
       a_complex[i].real = a[i];
       a_complex[i].imaginary = 0;
     }
-    for (int j = m-1; j > -1; --j) { // loop over each root to be found
+    for (uniform int j = m-1; j > -1; --j) { // loop over each root to be found
       x.real = 0.0;
       x.imaginary = 0.0; // start at zero to favor convergence to smallest remaining root
       laguer(ad, x, j+2);
@@ -563,20 +714,17 @@ void zroots(float a[11], complex roots[11], bool polish) {
     if (polish)
         for (uniform int j = 0; j < 11; ++j)
             laguer(a_complex, roots[j], 11);
+
     // sort roots by real parts by straight insertion
-    for (int j = 1; j < m; ++j) {
-      x = roots[j];
-      int i = j-1;
-      while (i >= 0) {
-        if (roots[i].real <= x.real)
-          break;
-        roots[i+1] = roots[i];
-        i -= 1;
+    for (uniform int i = 1; i < m; ++i) {
+      complex temp = roots[i];
+      int j = i;
+      while (j > 0 && roots[j-1].real > temp.real) {
+        roots[j] = roots[j-1];
+        j -= 1;
       }
-      roots[i+1] = x;
+      roots[j] = temp;
     }
-    /* for (int i = 0; i < 11; ++i) */
-    /*   roots[i] = c_roots[i].real; */
 }
 
 float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11]) {
@@ -672,27 +820,29 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   vec3f s;
   int stepTotal = 0;
   #if 1
+  float io;
   struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
   float poly[11];
   get_poly(coeffs, rayDir, frame, poly);
+  complex roots[11];
+  zroots(poly, roots, false);
+  float ray_roots[11];
+  rootsToRaySpace(roots, ray_roots, frame);
+  float real_ray_roots[11];
+  filterRealRoots(roots, ray_roots, real_ray_roots);
+  dist = real_ray_roots[0];
   vec3f p = cRayOrg + dist * rayDir;
-  float io = shFunctions(p, coeffs);
-  bool movePos = io > 0;
-  for(int step=0; step<STEPS_; step++) {
-    if (abs(io) < EPSILON)
-      break;
-    p = cRayOrg + dist * rayDir;
-    if ((movePos && io < 0) ||(!movePos && io > 0)) {
-      step_size = -0.5 * step_size;
-      movePos = !movePos;
-    }
-    /* print("%i,%i,%i,%i\n", coeffs[0], coeffs[1], coeffs[2], coeffs[3]); */
-    vec2f r = frame.frame_to_ray_space * make_vec2f(dist,1);
-    float t = r.x / r.y;
-    io = eval_poly(poly, t);
-    /* io = shFunctions(p, coeffs); */
-    dist += step_size;
-    }
+
+  isect.entry.hit = dist != 0;
+  if(isect.entry.hit) {
+    isect.entry.u = dist;
+    isect.entry.t = dist;
+    isect.entry.N = get_sh_glyph_normal(coeffs, p);
+  }
+
+  return isect;
+
+
   #elif 0
   vec3f p = cRayOrg + dist * rayDir;
   float io = shFunctions(p, coeffs);
@@ -807,22 +957,6 @@ void testComplexMath()
   /* assertEqual(res, expected, 1.0e-6); */
 }
 
-void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame) {
-  for (int i = 0; i < 11; ++i) {
-    vec2f v = make_vec2f(roots[i].real, 1.0);
-    v = frame.frame_to_ray_space * v;
-    ray_roots[i] = v.x / v.y;
-  }
-}
-
-void filterRealRoots(complex roots[11], float ray_roots[11], float real_ray_roots[11]) {
-  int index = 0;
-  for (int i = 0; i < 10; ++i) {
-    if (abs(roots[i].imaginary) < 1.0e-5)
-      real_ray_roots[index++] = ray_roots[i];
-  }
-}
-
 void testPolyGen()
 {
   testComplexMath();
@@ -857,10 +991,9 @@ void testPolyGen()
   assert(abs(x.real - 0.258963461279) < 1e-5);
 
   complex roots[11];
-  uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
-
   zroots(poly, roots, true);
 
+  uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
   for (int i = 0; i < 10; ++i)
     assert(abs(roots[i].real - roots_expected[i]) < 1.0e-5);
 
@@ -877,4 +1010,16 @@ void testPolyGen()
   uniform float real_ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.92441215, 5.02357046, 5.14509877};
   for (uniform int i = 0; i < 6; ++i)
     assert(abs(real_ray_roots[i] - real_ray_roots_expected[i]) < 1.0e-5);
+
+ uniform float expected_normal_x[] = {-0.81824761, 0.84623132, 0.93375575, -0.77115485, -0.33109223, 0.13755328};
+ uniform float expected_normal_y[] = {-0.50902668, 0.03363681, -0.15393211, -0.08527863, -0.34343862, -0.84198347};
+ uniform float expected_normal_z[] = {-0.26713797, 0.53175287, 0.32311778, 0.63091026, 0.87887874, 0.52167321};
+  vec3f cRayOrg = ray_origin - glyph_center;
+  for (uniform int i = 0; i < 6; ++i){
+    vec3f p = cRayOrg + real_ray_roots[i] * ray_dir;
+    vec3f n = get_sh_glyph_normal(sh_coeffs, p);
+    assert(abs(expected_normal_x[i] - n.x) < 1.0e-5);
+    assert(abs(expected_normal_y[i] - n.y) < 1.0e-5);
+    assert(abs(expected_normal_z[i] - n.z) < 1.0e-5);
+  }
 }

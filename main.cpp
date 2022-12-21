@@ -167,7 +167,7 @@ std::vector<glm::vec3> latVolNodes(int x, int y, int z)
 
 std::vector<float> makeRandomCoeffs(int size, int lMax)
 {
-    int coeffCount = ((lMax+1) * (lMax+1)) * size;
+    int coeffCount = 15 * size;
     std::vector<float> coeffs(coeffCount);
 
     int index = 0;
