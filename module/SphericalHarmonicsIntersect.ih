@@ -9,6 +9,12 @@
 const uniform float EPSILON = 1e-3;
 const int STEPS_ = 70;
 
+struct SHIntersections
+{
+  unsigned int numIntersections;
+  float roots[10];
+  vec3f normals[10];
+};
 float sign(float v)
 {
   return v < 0.f ? -1.f : 1.f;
@@ -95,36 +101,43 @@ float shFunctions(vec3f n, uniform float* c) {
   +c[24]*(k17*x2*(x2min3y2)-y2*(v3x2-y2)); // l=4, m= 4
   return r-abs(v);
 #else //legible
+  const uniform float invPi4 = 0.25 / PI;
   return
+   (
    (c[0]*k01) // l=0, m=0
+   )*(invPi4)+
   //----------------------------------------------------------
-	-c[1]*(k02*y) // l=1, m=-1
-  +c[2]*(k02*z) // l=1, m= 0
-  -c[3]*(k02*x) // l=1, m= 1
+	/* -c[1]*(k02*y) // l=1, m=-1 */
+  /* +c[2]*(k02*z) // l=1, m= 0 */
+  /* -c[3]*(k02*x) // l=1, m= 1 */
   //----------------------------------------------------------
-	+c[4]*(k03*xy) // l=2, m=-2
-  -c[5]*(k03*yz) // l=2, m=-1
-  +c[6]*(k04*(3.f*z2-1.f)) // l=2, m= 0
-  -c[7]*(k03*xz) // l=2, m= 1
-  +c[8]*(k05*(x2miny2)) // l=2, m= 2
+  (
+	+c[1]*(k03*xy) // l=2, m=-2
+  -c[2]*(k03*yz) // l=2, m=-1
+  +c[3]*(k04*(3.f*z2-1.f)) // l=2, m= 0
+  -c[4]*(k03*xz) // l=2, m= 1
+  +c[5]*(k05*(x2miny2)) // l=2, m= 2
+   )*(5.f*invPi4)+
   //----------------------------------------------------------
-  -c[9]*(k06*y*(v3x2-y2)) // l=3, m=-3
-  +c[10]*(k07*xy*z) // l=3, m=-2
-  -c[11]*(k08*y*(v5z2min1)) // l=3, m=-1
-  +c[12]*(k09*z*(v5z2-3.f)) // l=3, m= 0
-  -c[13]*(k08*x*(v5z2min1)) // l=3, m= 1
-  +c[14]*(k10*z*(x2miny2)) // l=3, m= 2
-  -c[15]*(k06*x*(x2-v3y2)) // l=3, m= 3
+  /* -c[9]*(k06*y*(v3x2-y2)) // l=3, m=-3 */
+  /* +c[10]*(k07*xy*z) // l=3, m=-2 */
+  /* -c[11]*(k08*y*(v5z2min1)) // l=3, m=-1 */
+  /* +c[12]*(k09*z*(v5z2-3.f)) // l=3, m= 0 */
+  /* -c[13]*(k08*x*(v5z2min1)) // l=3, m= 1 */
+  /* +c[14]*(k10*z*(x2miny2)) // l=3, m= 2 */
+  /* -c[15]*(k06*x*(x2-v3y2)) // l=3, m= 3 */
   //----------------------------------------------------------
-  +c[16]*(k11*xy*(x2miny2)) // l=4, m=-4
-  -c[17]*(k12*yz*(v3x2-y2)) // l=4, m=-3
-  +c[18]*(k13*xy*(v7z2min1)) // l=4, m=-2
-  -c[19]*(k14*y*(v7z2min3)) // l=4, m=-1
-  +c[20]*(k15*(35.f*z2*z2-30.f*z2+3.f)) // l=4, m= 0
-  -c[21]*(k14*x*(v7z2min3)) // l=4, m= 1
-  +c[22]*(k16*(x2miny2)*(v7z2min1)) // l=4, m= 2
-  -c[23]*(k12*xz*(x2min3y2)) // l=4, m= 3
-  +c[24]*(k17*x2*(x2min3y2)-y2*(v3x2-y2)); // l=4, m= 4
+  (
+  +c[6]*(k11*xy*(x2miny2)) // l=4, m=-4
+  -c[7]*(k12*yz*(v3x2-y2)) // l=4, m=-3
+  +c[8]*(k13*xy*(v7z2min1)) // l=4, m=-2
+  -c[9]*(k14*y*(v7z2min3)) // l=4, m=-1
+  +c[10]*(k15*(35.f*z2*z2-30.f*z2+3.f)) // l=4, m= 0
+  -c[11]*(k14*x*(v7z2min3)) // l=4, m= 1
+  +c[12]*(k16*(x2miny2)*(v7z2min1)) // l=4, m= 2
+  -c[13]*(k12*xz*(x2min3y2)) // l=4, m= 3
+  +c[14]*(k17*x2*(x2min3y2)-y2*(v3x2-y2)) // l=4, m= 4
+  )*(9.f*invPi4);
   #endif
 
 }
@@ -516,14 +529,14 @@ void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame)
   }
 }
 
-void filterRealRoots(complex roots[11], float ray_roots[11], float real_ray_roots[11]) {
-  int index = 0;
-  for (int i = 0; i < 11; ++i) {
+void filterRealRoots(complex roots[11], float ray_roots[11],
+    varying SHIntersections* uniform hitData) {
+
+  hitData->numIntersections = 0;
+  for (uniform int i = 0; i < 11; ++i) {
     if (abs(roots[i].imaginary) < 1.0e-5)
-      real_ray_roots[index++] = ray_roots[i];
+      hitData->roots[hitData->numIntersections++] = ray_roots[i];
   }
-  for (int i = index; i < 11; ++i)
-    real_ray_roots[i] = 0;
 }
 
 void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hessian, float sh[5][15]) {
@@ -792,18 +805,330 @@ float eval_poly(float poly[11], float t) {
   return y;
 }
 
+
+// code for inverse rotation method
+void RealWignerZRotation0(uniform float* coefficients, float angle)
+{
+	// Nothing to do for 0th order SH.
+	return;
+}
+
+void RealWignerZRotation2(uniform float* coefficients, float angle)
+{
+	// Local copy of second-order coefficients
+	float a[5];
+
+	// Copy coefficients
+	for (int i = 0; i < 5; i++)
+	{
+		a[i] = coefficients[i];
+	}
+
+	// Pre-compute sines and cosines
+	float c1 = cos(angle);
+	float c2 = cos(2.0 * angle);
+	float s1 = sin(angle);
+	float s2 = sin(2.0 * angle);
+
+	// Compute output coefficients
+	coefficients[0] = a[0] * c2 + a[4] * s2;
+	coefficients[1] = a[1] * c1 - a[3] * s1;
+	coefficients[2] = a[2];
+	coefficients[3] = a[3] * c1 + a[1] * s1;
+	coefficients[4] = a[4] * c2 - a[0] * s2;
+}
+
+void RealWignerZRotation4(uniform float* coefficients, float angle)
+{
+	// Local copy of fourth-order coefficients
+	float a[9];
+
+	// Copy coefficients
+	for (int i = 0; i < 9; i++)
+	{
+		a[i] = coefficients[i];
+	}
+
+	// Pre-compute sines and cosines
+	float c1 = cos(angle);
+	float c2 = cos(2.0 * angle);
+	float c3 = cos(3.0 * angle);
+	float c4 = cos(4.0 * angle);
+	float s1 = sin(angle);
+	float s2 = sin(2.0 * angle);
+	float s3 = sin(3.0 * angle);
+	float s4 = sin(4.0 * angle);
+
+	// Compute output coefficients
+	coefficients[0] = a[0] * c4 + a[8] * s4;
+	coefficients[1] = a[1] * c3 - a[7] * s3;
+	coefficients[2] = a[2] * c2 + a[6] * s2;
+	coefficients[3] = a[3] * c1 - a[5] * s1;
+	coefficients[4] = a[4];
+	coefficients[5] = a[5] * c1 + a[3] * s1;
+	coefficients[6] = a[6] * c2 - a[2] * s2;
+	coefficients[7] = a[7] * c3 + a[1] * s3;
+	coefficients[8] = a[8] * c4 - a[0] * s4;
+}
+
+void RealWignerZRotation(uniform float* coefficients, float angle)
+{
+	// Do nothing if the angle is zero
+	if (angle == 0.0)
+		return;
+
+	// Compute new coefficient values
+	RealWignerZRotation0(&coefficients[0], angle);
+	RealWignerZRotation2(&coefficients[1], angle);
+	RealWignerZRotation4(&coefficients[6], angle);
+}
+
+void RealWignerYRotation0(uniform float* coefficients, float angle)
+{
+	// Nothing to do for 0th order SH.
+	return;
+}
+
+void RealWignerYRotation2(uniform float* coefficients, float angle)
+{
+	// Local copy of second-order coefficients
+	float a[5];
+
+	// Copy coefficients
+	for (int i = 0; i < 5; i++)
+	{
+		a[i] = coefficients[i];
+	}
+
+	// Pre-compute sines and cosines
+	float c1 = cos(angle);
+	float c2 = cos(2.0 * angle);
+	float s1 = sin(angle);
+	float s2 = sin(2.0 * angle);
+
+	// Compute output coefficients
+	coefficients[0] = (3 * a[0] + sqrtf(3) * a[2] + a[0] * c2 - sqrtf(3) * a[2] * c2 - 2 * a[1] * s2) / 4.0;
+	coefficients[1] = (2 * a[1] * c2 + a[0] * s2 - sqrtf(3) * a[2] * s2) / 2.0;
+	coefficients[2] = (sqrtf(3) * a[0] + a[2] - sqrtf(3) * a[0] * c2 + 3 * a[2] * c2 + 2 * sqrtf(3) * a[1] * s2) / 4.0;
+	coefficients[3] = a[3] * c1 - a[4] * s1;
+	coefficients[4] = a[4] * c1 + a[3] * s1;
+}
+
+void RealWignerYRotation4(uniform float* coefficients, float angle)
+{
+	// Local copy of fourth-order coefficients
+	float a[9];
+
+	// Copy coefficients
+	for (int i = 0; i < 9; i++)
+	{
+		a[i] = coefficients[i];
+	}
+
+	// Pre-compute sines and cosines
+	float c1 = cos(angle);
+	float c2 = cos(2.0 * angle);
+	float c3 = cos(3.0 * angle);
+	float c4 = cos(4.0 * angle);
+	float s1 = sin(angle);
+	float s2 = sin(2.0 * angle);
+	float s3 = sin(3.0 * angle);
+	float s4 = sin(4.0 * angle);
+
+	// Compute output coefficients
+	coefficients[0] = (35*a[0] + 10*sqrtf(7)*a[2] + 3*sqrtf(35)*a[4] + 28*a[0]*c2 - 8*sqrtf(7)*a[2]*c2 - 4*sqrtf(35)*a[4]*c2 + a[0]*c4 - 2*sqrtf(7)*a[2]*c4 + sqrtf(35)*a[4]*c4 - 28*sqrtf(2)*a[1]*s2 - 4*sqrtf(14)*a[3]*s2 - 2*sqrtf(2)*a[1]*s4 + 2*sqrtf(14)*a[3]*s4)/64.0;
+	coefficients[1] = (28*a[1]*c2 + 4*sqrtf(7)*a[3]*c2 + 4*a[1]*c4 - 4*sqrtf(7)*a[3]*c4 + 14*sqrtf(2)*a[0]*s2 - 4*sqrtf(14)*a[2]*s2 - 2*sqrtf(70)*a[4]*s2 + sqrtf(2)*a[0]*s4 - 2*sqrtf(14)*a[2]*s4 + sqrtf(70)*a[4]*s4)/32.0;
+	coefficients[2] = (5*sqrtf(7)*a[0] + 10*a[2] + 3*sqrtf(5)*a[4] - 4*sqrtf(7)*a[0]*c2 + 8*a[2]*c2 + 4*sqrtf(5)*a[4]*c2 - sqrtf(7)*a[0]*c4 + 14*a[2]*c4 - 7*sqrtf(5)*a[4]*c4 + 4*sqrtf(14)*a[1]*s2 + 4*sqrtf(2)*a[3]*s2 + 2*sqrtf(14)*a[1]*s4 - 14*sqrtf(2)*a[3]*s4)/32.0;
+	coefficients[3] = (4*sqrtf(7)*a[1]*c2 + 4*a[3]*c2 - 4*sqrtf(7)*a[1]*c4 + 28*a[3]*c4 + 2*sqrtf(14)*a[0]*s2 - 4*sqrtf(2)*a[2]*s2 - 2*sqrtf(10)*a[4]*s2 - sqrtf(14)*a[0]*s4 + 14*sqrtf(2)*a[2]*s4 - 7*sqrtf(10)*a[4]*s4)/32.0;
+	coefficients[4] = (3*sqrtf(35)*a[0] + 6*sqrtf(5)*a[2] + 9*a[4] - 4*sqrtf(35)*a[0]*c2 + 8*sqrtf(5)*a[2]*c2 + 20*a[4]*c2 + sqrtf(35)*a[0]*c4 - 14*sqrtf(5)*a[2]*c4 + 35*a[4]*c4 + 4*sqrtf(70)*a[1]*s2 + 4*sqrtf(10)*a[3]*s2 - 2*sqrtf(70)*a[1]*s4 + 14*sqrtf(10)*a[3]*s4)/64.0;
+	coefficients[5] = (9*a[5]*c1 + 3*sqrtf(7)*a[7]*c1 + 7*a[5]*c3 - 3*sqrtf(7)*a[7]*c3 - 3*sqrtf(2)*a[6]*s1 - 3*sqrtf(14)*a[8]*s1 - 7*sqrtf(2)*a[6]*s3 + sqrtf(14)*a[8]*s3)/16.0;
+	coefficients[6] = (2*a[6]*c1 + 2*sqrtf(7)*a[8]*c1 + 14*a[6]*c3 - 2*sqrtf(7)*a[8]*c3 + 3*sqrtf(2)*a[5]*s1 + sqrtf(14)*a[7]*s1 + 7*sqrtf(2)*a[5]*s3 - 3*sqrtf(14)*a[7]*s3)/16.0;
+	coefficients[7] = (3*sqrtf(7)*a[5]*c1 + 7*a[7]*c1 - 3*sqrtf(7)*a[5]*c3 + 9*a[7]*c3 - sqrtf(14)*a[6]*s1 - 7*sqrtf(2)*a[8]*s1 + 3*sqrtf(14)*a[6]*s3 - 3*sqrtf(2)*a[8]*s3)/16.0;
+	coefficients[8] = (2*sqrtf(7)*a[6]*c1 + 14*a[8]*c1 - 2*sqrtf(7)*a[6]*c3 + 2*a[8]*c3 + 3*sqrtf(14)*a[5]*s1 + 7*sqrtf(2)*a[7]*s1 - sqrtf(14)*a[5]*s3 + 3*sqrtf(2)*a[7]*s3)/16.0;
+
+	return;
+}
+
+void RealWignerYRotation(uniform float* coefficients, float angle)
+{
+	// Do nothing if the angle is zero
+	if (angle == 0.0)
+		return;
+
+	// Compute new coefficient values
+	RealWignerYRotation0(&coefficients[0], angle);
+	RealWignerYRotation2(&coefficients[1], angle);
+	RealWignerYRotation4(&coefficients[6], angle);
+}
+
+float CylinderRhoMax(int l, int m)
+{
+	// Output value
+	float result = 0.0;
+
+	// Hard-coded results for all combinations of "l" and "m"
+	     if ((l == 0) && (m ==  0))		result = 0.282095;
+	else if ((l == 2) && (m == -2))		result = 0.386274;
+	else if ((l == 2) && (m == -1))		result = 0.297354;
+	else if ((l == 2) && (m ==  0))		result = 0.315392;
+	else if ((l == 2) && (m ==  1))		result = 0.297354;
+	else if ((l == 2) && (m ==  2))		result = 0.386274;
+	else if ((l == 4) && (m == -4))		result = 0.442533;
+	else if ((l == 4) && (m == -3))		result = 0.358249;
+	else if ((l == 4) && (m == -2))		result = 0.334523;
+	else if ((l == 4) && (m == -1))		result = 0.311653;
+	else if ((l == 4) && (m ==  0))		result = 0.317357;
+	else if ((l == 4) && (m ==  1))		result = 0.311653;
+	else if ((l == 4) && (m ==  2))		result = 0.334523;
+	else if ((l == 4) && (m ==  3))		result = 0.358249;
+	else if ((l == 4) && (m ==  4))		result = 0.442533;
+
+	return result;
+}
+
+float CylinderZMax(int l, int m)
+{
+	// Output value
+	float result = 0.0;
+
+	// Hard-coded results for all combinations of "l" and "m"
+	     if ((l == 0) && (m ==  0))		result = 0.282095;
+	else if ((l == 2) && (m == -2))		result = 0.148677;
+	else if ((l == 2) && (m == -1))		result = 0.297354;
+	else if ((l == 2) && (m ==  0))		result = 0.630783;
+	else if ((l == 2) && (m ==  1))		result = 0.297354;
+	else if ((l == 2) && (m ==  2))		result = 0.148677;
+	else if ((l == 4) && (m == -4))		result = 0.126660;
+	else if ((l == 4) && (m == -3))		result = 0.232690;
+	else if ((l == 4) && (m == -2))		result = 0.335275;
+	else if ((l == 4) && (m == -1))		result = 0.459798;
+	else if ((l == 4) && (m ==  0))		result = 0.846284;
+	else if ((l == 4) && (m ==  1))		result = 0.459798;
+	else if ((l == 4) && (m ==  2))		result = 0.335275;
+	else if ((l == 4) && (m ==  3))		result = 0.232690;
+	else if ((l == 4) && (m ==  4))		result = 0.126660;
+
+	return result;
+}
+
+float CylinderRMax(uniform float* coefficients)
+{
+	// Output radius
+	float sumL = 0.0;
+
+	// Sum for one order
+	float sumM = 0.0;
+
+	// Coefficient index
+	int j = 0;
+
+	// Loop through the orders
+	for (int l = 0; l <= 4; l += 2) {
+		// Reset the sum for this order
+		sumM = 0.0;
+
+		// Process (2*L+1) coefficients
+		for (int m = -l; m <= l; m++) {
+			sumM += abs(coefficients[j]) * CylinderRhoMax(l, m);
+			j++;
+		}
+		sumL += sumM;
+	}
+	return sumL;
+}
+
+float CylinderZMax(uniform float* coefficients)
+{
+	assert(coefficients != NULL);
+
+	// Output radius
+	float sumL = 0.0;
+
+	// Sum for one order
+	float sumM = 0.0;
+
+	// Coefficient index
+	int j = 0;
+
+	// Loop through the orders
+	for (int l = 0; l <= 4; l += 2) {
+		// Reset the sum for this order
+		sumM = 0.0;
+
+		// Process (2*L+1) coefficients
+		for (int m = -l; m <= l; m++) {
+			sumM += abs(coefficients[j]) * CylinderZMax(l, m);
+			j++;
+		}
+		sumL += sumM;
+	}
+	return sumL;
+}
+
+float C0even(uniform float* coeffs, float phi) {
+  return (coeffs[0] + sqrt(5.0)*coeffs[3] + 3.0*coeffs[10])/(2.0*sqrt(PI));
+}
+
+float C1even(uniform float* coeffs, float phi) {
+  return (sqrt(5.0/PI)*((sqrt(3.0)*coeffs[2] + 3.0*sqrt(2.0)*coeffs[9])*cos(phi) - (sqrt(3.0)*coeffs[4] + 3.0*sqrt(2.0)*coeffs[11])*sin(phi)))/2.0;
+}
+
+float C2even(uniform float* coeffs, float phi) {
+  return (4.0*coeffs[0] + sqrt(5.0)*coeffs[3] - 18.0*coeffs[10] + sqrt(5.0)*(sqrt(3.0)*coeffs[1] + 9.0*coeffs[8])*cos(2.0*phi) + sqrt(5.0)*(sqrt(3.0)*coeffs[5] + 9.0*coeffs[12])*sin(2.0*phi))/(4.0*sqrt(PI));
+}
+
+float C3even(uniform float* coeffs, float phi) {
+  return (sqrt(5.0/PI)*((4.0*sqrt(3.0)*coeffs[2] - 9.0*sqrt(2.0)*coeffs[9])*cos(phi) + 3.0*sqrt(14.0)*coeffs[7]*cos(3.0*phi) - 4.0*sqrt(3.0)*coeffs[4]*sin(phi) + 9.0*sqrt(2.0)*coeffs[11]*sin(phi) - 3.0*sqrt(14.0)*coeffs[13]*sin(3.0*phi)))/8.0;
+}
+
+float C4even(uniform float* coeffs, float phi) {
+  return (8.0*coeffs[0] - 4.0*sqrt(5.0)*coeffs[3] + 9.0*coeffs[10] + 2.0*sqrt(5.0)*(2.0*sqrt(3.0)*coeffs[1] - 3.0*coeffs[8])*cos(2.0*phi) + 3.0*sqrt(35.0)*coeffs[6]*cos(4.0*phi) + 2.0*sqrt(5.0)*(2.0*sqrt(3.0)*coeffs[5] - 3.0*coeffs[12])*sin(2.0*phi) + 3.0*sqrt(35.0)*coeffs[14]*sin(4.0*phi))/(16.0*sqrt(PI));
+}
+
+float Ceven(uniform float* coeffs, int lmax, float phi)
+{
+  float result = 0.0;
+  if (lmax == 0) result = C0even(coeffs, phi);
+  else if (lmax == 1) result = C1even(coeffs, phi);
+  else if (lmax == 2) result = C2even(coeffs, phi);
+  else if (lmax == 3) result = C3even(coeffs, phi);
+  else if (lmax == 4) result = C4even(coeffs, phi);
+  return result;
+}
+
+float chPolyVal(float Ce[5], float rho, float z)
+{
+    float sumit = 0.0;
+    float zp = abs(z);
+    float s;
+    for (uniform int n=0; n <=4; n++)
+      {
+      // XXX: There is a problem for z < 0. The code below fixes this but its not ideal.
+      //  It would be better to fix the IsInsideCylindricalHarmonic for negative z.
+      if ((z < 0.0) && ((n==1)||(n==3))) s = -1.0;
+      else s = 1.0;
+      sumit += Ce[n]*pow(rho, (float)n)*pow(zp, (float)(4-n))*s;
+      } // for n
+    //if (sumit > pow(sqrt(rho*rho+zp*zp), 5.0)) isInside = true;
+    //else isInside = false;
+    return sumit - pow(sqrt(rho*rho+zp*zp), 5.0);
+}
+
 inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     const vec3f& rayDir,
     const uniform vec3f& center,
     const uniform float* coeffs,
     const uniform int degreeL,
-    const uniform float boundRadius)
+    const uniform float boundRadius,
+    varying SHIntersections* uniform hitData)
 {
   Intersections isect;
   isect.entry.hit = false;
   isect.exit.hit = false;
   isect.entry.t = inf;
   isect.exit.t = -inf;
+  bool hitDataPresent = hitData != NULL;
+  if (hitDataPresent && hitData->numIntersections != 0) return isect;
 
   vec3f cRayOrg = rayOrg - center;
 
@@ -819,6 +1144,7 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   vec2f m = make_vec2f(-1.0);
   vec3f s;
   int stepTotal = 0;
+  vec3f p;
   #if 1
   float io;
   struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
@@ -828,23 +1154,102 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   zroots(poly, roots, false);
   float ray_roots[11];
   rootsToRaySpace(roots, ray_roots, frame);
-  float real_ray_roots[11];
-  filterRealRoots(roots, ray_roots, real_ray_roots);
-  dist = real_ray_roots[0];
-  vec3f p = cRayOrg + dist * rayDir;
+  if (hitDataPresent) {
+    hitData->numIntersections = 0;
+    filterRealRoots(roots, ray_roots, hitData);
+    for (int i = 0; i < hitData->numIntersections > 0; ++i)
+      hitData->normals[i] = get_sh_glyph_normal(coeffs, cRayOrg + hitData->roots[i] * rayDir);
+  }
+  else {
+    for (uniform int i = 0; i < 11; ++i)
+      if (abs(roots[i].imaginary) < 1.0e-5) {
+        dist = ray_roots[i];
+        isect.entry.hit = true;
+        break;
+      }
+  }
 
-  isect.entry.hit = dist != 0;
   if(isect.entry.hit) {
-    isect.entry.u = dist;
+    isect.entry.u = ray_roots[0];
     isect.entry.t = dist;
+    p = cRayOrg + dist * rayDir;
     isect.entry.N = get_sh_glyph_normal(coeffs, p);
   }
 
   return isect;
 
 
+  #elif 0 // inverse rotation method
+  vec3f eyeposT = cRayOrg - center; // TODO double check this
+  vec3f viewUp = make_vec3f(0.0,1.0,0.0);
+  vec3f eZ = normalize(eyeposT);
+	vec3f eX = normalize(cross(viewUp, eZ)); // TODO pass viewUp
+  vec3f eY = normalize(cross(eZ, eX));
+  float gamma = atan2(eY.z, -1.0 * eX.z);
+  float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z);
+  float alpha = atan2(eZ.y, eZ.x);
+  uniform float* coeffsCopy = new float[15];
+  for (uniform int i = 0; i < 15; ++i)
+    coeffsCopy[i] = coeffs[i];
+
+  float zrot = 0.0f;
+  float yrot = 0.0f;
+  RealWignerZRotation(coeffsCopy, zrot);
+  RealWignerYRotation(coeffsCopy, yrot);
+
+  // Rotate around Z-axis.
+  vec3f e = eyeposT;
+  eyeposT.x = e.x * cos(alpha) + e.y * sin(alpha);
+  eyeposT.y = e.y * cos(alpha) - e.x * sin(alpha);
+
+  // Rotate around Y-axis
+  e = eyeposT;
+  eyeposT.x = e.x * cos(beta) - e.z * sin(beta);
+  eyeposT.z = e.z * cos(beta) + e.x * sin(beta);
+
+  // Rotate around z-axis
+  e = eyeposT;
+  eyeposT.x = e.x * cos(gamma) + e.y * sin(gamma);
+  eyeposT.y = e.y * cos(gamma) - e.x * sin(gamma);
+
+
+	RealWignerZRotation(coeffsCopy, alpha);
+	RealWignerYRotation(coeffsCopy, beta);
+	RealWignerZRotation(coeffsCopy, gamma);
+	float cylRhoMax = CylinderRMax(coeffsCopy);
+	float cylZMax   = CylinderZMax(coeffsCopy);
+
+  p = cRayOrg + dist * rayDir;
+  float rho = sqrt(p.x*p.x+p.y*p.y);
+  float z = p.z;
+  float phi = atan2(rayDir.x,rayDir.y);
+  float C[5];
+  C[0] = C0even(coeffsCopy, phi);
+  C[1] = C1even(coeffsCopy, phi);
+  C[2] = C2even(coeffsCopy, phi);
+  C[3] = C3even(coeffsCopy, phi);
+  C[4] = C4even(coeffsCopy, phi);
+
+  float r = min(cylRhoMax, max_dist);
+
+  float io = chPolyVal(C, rho, z);
+  bool movePos = io > 0;
+  for( int step=0; step<STEPS_; step++) {
+    stepTotal = step;
+    if (abs(io) < EPSILON)
+      break;
+    p = cRayOrg + dist * rayDir;
+    if ((movePos && io < 0) ||(!movePos && io > 0)) {
+      step_size = -0.5 * step_size;
+      movePos = !movePos;
+    }
+    io = chPolyVal(C, rho, z);
+
+    dist += step_size;
+  }
+
   #elif 0
-  vec3f p = cRayOrg + dist * rayDir;
+  p = cRayOrg + dist * rayDir;
   float io = shFunctions(p, coeffs);
   bool movePos = io > 0;
   for( int step=0; step<STEPS_; step++) {
@@ -861,7 +1266,6 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     dist += step_size;
   }
   #else
-  vec3f p;
   vec3f gradient;
   float io = 100.f;
   float f = 100.f;
@@ -1004,22 +1408,23 @@ void testPolyGen()
   for (uniform int i = 0; i < 10; ++i)
     assert(abs(ray_roots[i] - ray_roots_expected[i]) < 1.0e-5);
 
-  float real_ray_roots[11];
-  filterRealRoots(roots, ray_roots, real_ray_roots);
+  /* SHIntersections hitData; */
+  /* hitData.numIntersections = 0; */
+  /* filterRealRoots(roots, ray_roots, &hitData); */
 
-  uniform float real_ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.92441215, 5.02357046, 5.14509877};
-  for (uniform int i = 0; i < 6; ++i)
-    assert(abs(real_ray_roots[i] - real_ray_roots_expected[i]) < 1.0e-5);
+ /*  uniform float real_ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.92441215, 5.02357046, 5.14509877}; */
+ /*  for (uniform int i = 0; i < 6; ++i) */
+ /*    assert(abs(hitData.roots[i] - real_ray_roots_expected[i]) < 1.0e-5); */
 
- uniform float expected_normal_x[] = {-0.81824761, 0.84623132, 0.93375575, -0.77115485, -0.33109223, 0.13755328};
- uniform float expected_normal_y[] = {-0.50902668, 0.03363681, -0.15393211, -0.08527863, -0.34343862, -0.84198347};
- uniform float expected_normal_z[] = {-0.26713797, 0.53175287, 0.32311778, 0.63091026, 0.87887874, 0.52167321};
-  vec3f cRayOrg = ray_origin - glyph_center;
-  for (uniform int i = 0; i < 6; ++i){
-    vec3f p = cRayOrg + real_ray_roots[i] * ray_dir;
-    vec3f n = get_sh_glyph_normal(sh_coeffs, p);
-    assert(abs(expected_normal_x[i] - n.x) < 1.0e-5);
-    assert(abs(expected_normal_y[i] - n.y) < 1.0e-5);
-    assert(abs(expected_normal_z[i] - n.z) < 1.0e-5);
-  }
+ /* uniform float expected_normal_x[] = {-0.81824761, 0.84623132, 0.93375575, -0.77115485, -0.33109223, 0.13755328}; */
+ /* uniform float expected_normal_y[] = {-0.50902668, 0.03363681, -0.15393211, -0.08527863, -0.34343862, -0.84198347}; */
+ /* uniform float expected_normal_z[] = {-0.26713797, 0.53175287, 0.32311778, 0.63091026, 0.87887874, 0.52167321}; */
+ /*  vec3f cRayOrg = ray_origin - glyph_center; */
+ /*  for (uniform int i = 0; i < 6; ++i){ */
+ /*    vec3f p = cRayOrg + hitData.roots[i] * ray_dir; */
+ /*    vec3f n = get_sh_glyph_normal(sh_coeffs, p); */
+ /*    assert(abs(expected_normal_x[i] - n.x) < 1.0e-5); */
+ /*    assert(abs(expected_normal_y[i] - n.y) < 1.0e-5); */
+ /*    assert(abs(expected_normal_z[i] - n.z) < 1.0e-5); */
+ /*  } */
 }

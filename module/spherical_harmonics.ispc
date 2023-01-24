@@ -17,7 +17,8 @@
 // c++ shared
 #include "SphericalHarmonicsShared.h"
 
-static void SphericalHarmonics_postIntersect(const Geometry *uniform geometry,
+
+void SphericalHarmonics_postIntersect(const Geometry *uniform geometry,
                                          varying DifferentialGeometry &dg,
                                          const varying Ray &ray,
                                          uniform int64 flags)
@@ -77,6 +78,9 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     if (!args->valid[programIndex])
         return;
 
+    EmbreeIntersectionContext *uniform ctxt = ((EmbreeIntersectionContext *uniform)args->context);
+    varying SHIntersections* uniform hitData = (varying SHIntersections* uniform)ctxt->userPtr;
+
     SphericalHarmonics *uniform self = (SphericalHarmonics * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
 
@@ -88,7 +92,7 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     const uniform vec3f center = get_vec3f(self->vertex, primID);
     const uint32 coeffsCount = 15;
     const uniform float* coeffs = (const uniform float*)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
-    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, self->degreeL, self->boundRadius[primID]);
+    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, self->degreeL, self->boundRadius[primID], hitData);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);

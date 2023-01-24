@@ -209,6 +209,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
 
     #if 1
+    // cpp::Renderer renderer("sphharm");
     cpp::Renderer renderer("scivis");
     #else
     cpp::Renderer renderer("debug");
@@ -255,7 +256,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     #else
     // std::vector<glm::vec3> positions = {glm::vec3(0.0, 0.0, 0.0),
     // glm::vec3(1.0, 0.0, 0.0)};
-    std::vector<glm::vec3> positions = latVolNodes(2,2,2);
+    std::vector<glm::vec3> positions = latVolNodes(1,1,1);
     // std::vector<float> coeffs =
     //               {0.0,
     //           0.0, 0.3, 0.0,
@@ -280,7 +281,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
 
     float ns = 10.0f;
     glm::vec3 ks = glm::vec3(1.0f, 1.0f, 1.0f);
-    OSPMaterial material = ospNewMaterial("scivis", "obj");
+    OSPMaterial material = ospNewMaterial("sphharm", "obj");
     ospSetParam(material, "ks", OSP_VEC3F, &ks);
     ospSetParam(material, "ns", OSP_FLOAT, &ns);
     ospCommit(material);
