@@ -209,13 +209,13 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
 
     #if 1
-    // cpp::Renderer renderer("sphharm");
-    cpp::Renderer renderer("scivis");
+    cpp::Renderer renderer("sphharm");
+    // cpp::Renderer renderer("scivis");
     #else
     cpp::Renderer renderer("debug");
     // renderer.setParam("method", "backfacing_Ng");
-    renderer.setParam("method", "texCoord");
-    // renderer.setParam("method", "Ng");
+    // renderer.setParam("method", "texCoord");
+    renderer.setParam("method", "Ng");
     // renderer.setParam("method", "backfacing_Ns");
     #endif
     renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));

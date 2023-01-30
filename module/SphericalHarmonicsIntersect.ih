@@ -532,7 +532,6 @@ void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame)
 void filterRealRoots(complex roots[11], float ray_roots[11],
     varying SHIntersections* uniform hitData) {
 
-  hitData->numIntersections = 0;
   for (uniform int i = 0; i < 11; ++i) {
     if (abs(roots[i].imaginary) < 1.0e-5)
       hitData->roots[hitData->numIntersections++] = ray_roots[i];
@@ -689,7 +688,7 @@ float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, 
         sh_poly[i] += inv_vander[i-1][j] * poly_values[j];
 }
 
-void zroots(float a[11], complex roots[11], bool polish) {
+void zroots(float a[11], complex roots[11], bool polish, vec3f& debug_col) {
     float EPS = 1.0e-14;
     const uniform int m = 10;
     complex x = {0,0};
@@ -738,9 +737,12 @@ void zroots(float a[11], complex roots[11], bool polish) {
       }
       roots[j] = temp;
     }
+    debug_col.x = roots[0].real;
+    /* debug_col.y = roots[1].real; */
+    /* debug_col.z = roots[2].real; */
 }
 
-float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11]) {
+float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11], vec3f& debug_col) {
     float sh_poly[5];
     get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
     // Square this polynomial
@@ -1146,19 +1148,23 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   int stepTotal = 0;
   vec3f p;
   #if 1
+  vec3f debug_col = make_vec3f(0);
   float io;
   struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
   float poly[11];
-  get_poly(coeffs, rayDir, frame, poly);
+  get_poly(coeffs, rayDir, frame, poly, debug_col);
   complex roots[11];
-  zroots(poly, roots, false);
+  zroots(poly, roots, false, debug_col);
   float ray_roots[11];
   rootsToRaySpace(roots, ray_roots, frame);
   if (hitDataPresent) {
-    hitData->numIntersections = 0;
     filterRealRoots(roots, ray_roots, hitData);
+    hitData->numIntersections = 1; // hard code to 1 so always visualizing a value
     for (int i = 0; i < hitData->numIntersections > 0; ++i)
       hitData->normals[i] = get_sh_glyph_normal(coeffs, cRayOrg + hitData->roots[i] * rayDir);
+    hitData->roots[1] = debug_col.x;
+    hitData->roots[2] = debug_col.y;
+    hitData->roots[3] = debug_col.z;
   }
   else {
     for (uniform int i = 0; i < 11; ++i)
@@ -1379,7 +1385,8 @@ void testPolyGen()
   float sh_poly[5];
   get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
   float poly[11];
-  get_poly(sh_coeffs, ray_dir, frame, poly);
+  vec3f debug_col;
+  get_poly(sh_coeffs, ray_dir, frame, poly, debug_col);
 
   uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.};
   for (int i = 0; i < 11; ++i)
@@ -1395,7 +1402,7 @@ void testPolyGen()
   assert(abs(x.real - 0.258963461279) < 1e-5);
 
   complex roots[11];
-  zroots(poly, roots, true);
+  zroots(poly, roots, true, debug_col);
 
   uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
   for (int i = 0; i < 10; ++i)

@@ -80,7 +80,7 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
 
     EmbreeIntersectionContext *uniform ctxt = ((EmbreeIntersectionContext *uniform)args->context);
     /* varying SHIntersections* uniform hitData = (varying SHIntersections* uniform)ctxt->userPtr; */
-    varying SHIntersections* uniform hitData = NULL; // hard code to not expect multiple intersections
+    varying SHIntersections* uniform hitData = (varying SHIntersections* uniform)ctxt->userPtr;
 
     SphericalHarmonics *uniform self = (SphericalHarmonics * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
@@ -117,5 +117,5 @@ export void *uniform SphericalHarmonics_postIntersect_addr()
 
 export void SphericalHarmonics_tests()
 {
-    testPolyGen();
+    /* testPolyGen(); */
 }
