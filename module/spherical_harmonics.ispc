@@ -93,7 +93,7 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     const uniform vec3f center = get_vec3f(self->vertex, primID);
     const uint32 coeffsCount = 15;
     const uniform float* coeffs = (const uniform float*)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
-    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, self->degreeL, self->boundRadius[primID], hitData);
+    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, self->degreeL, self->boundRadius[primID], hitData, self->camera);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);
@@ -117,5 +117,7 @@ export void *uniform SphericalHarmonics_postIntersect_addr()
 
 export void SphericalHarmonics_tests()
 {
-    /* testPolyGen(); */
+  testComplexMath();
+  testPolyGen();
+  testPolyGenInverseRotation();
 }

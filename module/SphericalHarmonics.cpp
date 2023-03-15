@@ -6,6 +6,7 @@
 #include "SphericalHarmonicsShared.h"
 #include "common/Data.h"
 #include "common/World.h"
+#include "camera/PerspectiveCamera.h"
 // ispc-generated files
 #include "spherical_harmonics_ispc.h"
 
@@ -33,6 +34,7 @@ namespace tensor_geometry {
         vertexData = getParamDataT<vec3f>("glyph.position", true);
         coefficientData = getParamDataT<float>("glyph.coefficients");
         degreeL = getParam<int>("glyph.degreeL");
+        auto cam = (PerspectiveCamera*)getParamObject("glyph.camera");
 
         createEmbreeUserGeometry((RTCBoundsFunction)&ispc::SphericalHarmonics_bounds,
                                  (RTCIntersectFunctionN)&ispc::SphericalHarmonics_intersect,
@@ -41,6 +43,7 @@ namespace tensor_geometry {
         getSh()->coefficients = *ispc(coefficientData);
         getSh()->degreeL = degreeL;
         getSh()->boundRadius = new float[vertexData->size()];
+        getSh()->camera = cam->getSh();
 
         postCreationInfo();
         ispc::SphericalHarmonics_tests();

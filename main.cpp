@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <iostream>
 #include <limits>
+#include <fstream>
 #include <stdlib.h>
 #include <thread>
 #include <SDL.h>
@@ -161,7 +162,7 @@ std::vector<glm::vec3> latVolNodes(int x, int y, int z)
     for (int i = 0; i < x; ++i)
         for (int j = 0; j < y; ++j)
             for (int k = 0; k < z; ++k)
-                positions[index++] = glm::vec3((float)i, (float)j, (float)k);
+                positions[index++] = glm::vec3((float)j-y/2, (float)k-z/2, (float)i-x/2);
     return positions;
 }
 
@@ -183,6 +184,9 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     glm::vec3 cam_at;
     glm::vec3 cam_up;
 
+    bool cmdline_file = false;
+    std::string filename;
+
     for (size_t i = 1; i < args.size(); ++i) {
         if (args[i] == "-camera") {
             cmdline_camera = true;
@@ -198,13 +202,72 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             cam_up.y = std::stof(args[++i]);
             cam_up.z = std::stof(args[++i]);
         }
+        if (args[i] == "-file") {
+            cmdline_file = true;
+            filename = args[++i];
+        }
+    }
+
+    int x, y, z;
+    std::vector<float> coeffs;
+    if (cmdline_file) {
+        int sh;
+        std::string myline;
+        std::ifstream myfile(filename);
+        std::cout << myfile.tellg() << "\n";
+        for (int i = 0; i < 75 && myfile.good(); ++i) {
+            std::getline(myfile, myline);
+            if (myline.find("dim") != std::string::npos) {
+                std::string dims = myline.substr(5);
+                std::cout << dims << "\n";
+                int firstDelim = dims.find(",");
+                x = std::stof(dims.substr(0, firstDelim));
+                int secondDelim = dims.find(",", firstDelim+1);
+                y = std::stof(dims.substr(firstDelim+1, dims.find(",")));
+                int thirdDelim = dims.find(",", secondDelim+1);
+                z = std::stof(dims.substr(secondDelim+1, dims.find(",")));
+                int fourthDelim = dims.find(",", thirdDelim+1);
+                sh = std::stof(dims.substr(thirdDelim+1, dims.find(",")));
+            }
+            if (myline.find("END") != std::string::npos)
+                break;
+        }
+        coeffs.resize(x*y*z*15);
+        float f;
+        float max = 0;
+        std::ifstream bin(filename);
+        bin.seekg(myfile.tellg()+9); // skip EOL char
+        int in_index = 0;
+        for (int i = 0; i < x*y*z; ++i) {
+            for (int s = 0; s < 15; ++s) {
+                bin.read(reinterpret_cast<char*>(&f), sizeof(float));
+                // if (s == 2) { // 2
+                    coeffs[i*15+s] = f*0.6;
+                max = std::max(max, f);
+            // }
+                // else
+                    // coeffs[i*15+s] = 0.01;
+            }
+            bin.seekg(bin.tellg()+(sh-15)*sizeof(float));
+        }
+        // std::cout << "max " << max << "\n";
+        int left = 0;
+        while(bin.read(reinterpret_cast<char*>(&f), sizeof(float))) left++;
+        // std::cout << left << " char left\n";
     }
 
     const glm::vec3 world_center(0.f);
     if (!cmdline_camera) {
-        cam_eye = world_center - glm::vec3(0.f, 0.f, 5.f);
+        if (cmdline_file) {
+            cam_eye = world_center - glm::vec3(0.f, 50.f, 0.f);
+            cam_up = glm::vec3(0.f, 0.f, 1.f);
+        }
+        else {
+            cam_eye = world_center - glm::vec3(1e-5, 1e-5, 3.f);
+            cam_up = glm::vec3(0.f, 1.f, 0.f);
+            // cam_up = glm::vec3(0.f, 1.f, 0.f);
+        }
         cam_at = world_center;
-        cam_up = glm::vec3(0.f, 1.f, 0.f);
     }
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
 
@@ -256,23 +319,48 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     #else
     // std::vector<glm::vec3> positions = {glm::vec3(0.0, 0.0, 0.0),
     // glm::vec3(1.0, 0.0, 0.0)};
-    std::vector<glm::vec3> positions = latVolNodes(1,1,1);
-    // std::vector<float> coeffs =
-    //               {0.0,
-    //           0.0, 0.3, 0.0,
-    //      0.0, 0.0, 0.0, 0.7, 0.0,
-    // 0.0, 0.0, 0.7, 0.0, 0.0, 0.0, 0.0,
-    // 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-    //                0.0,
-    //           0.0, 0.7, 0.0,
-    //      0.0, 0.0, 0.0, 0.9, 0.0,
-    // 0.0, 0.0, 0.4, 0.0, 0.0, 0.0, 0.0,
-    // 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
-    std::vector<float> coeffs = makeRandomCoeffs(8, 4);
+
+    if (cmdline_file) {
+        // std::cout << "  num: " << coeffs.size() << std::endl;
+        // std::cout << "start: " << x*y*(z/2)*15 << std::endl;
+        // std::cout << "  end: " << x*y*(z/2+1)*15 << std::endl;
+        std::vector<float> slice(&coeffs[x*y*(z/2)*15], &coeffs[x*y*(z/2+1)*15]);
+        // std::vector<float> line(&coeffs[(x*y*(z/2)+(y*x/2)+45)*15], &coeffs[(x*y*(z/2)+(y*x/2)+50)*15]);
+        // std::cout << "line size: " << line.size()/15 << std::endl;
+        coeffs = slice;
+        z = 1;
+    }
+
+    std::vector<glm::vec3> positions;
+    if (cmdline_file)
+        positions = latVolNodes(x,y,1);
+    else
+        positions = latVolNodes(2,2,2);
+        // positions = latVolNodes(1,1,1);
+
+    if (!cmdline_file)
+        coeffs = makeRandomCoeffs(positions.size(), 4);
+
+    cam_eye = arcball.eye();
+    glm::vec3 cam_dir = arcball.dir();
+    cam_up = arcball.up();
+    glm::vec3 cam_right = cross(cam_dir, cam_up);
+
+    cpp::Camera camera("perspective");
+    camera.setParam("aspect", static_cast<float>(win_width) / win_height);
+    camera.setParam("position", cam_eye);
+    camera.setParam("direction", cam_dir);
+    camera.setParam("up", cam_up);
+    camera.setParam("fovy", 40.f);
+    camera.commit();
+
+
+
     cpp::Geometry mesh("spherical_harmonics");
     mesh.setParam("glyph.position", cpp::CopiedData(positions));
     mesh.setParam("glyph.coefficients", cpp::CopiedData(coeffs));
     mesh.setParam("glyph.degreeL", 4);
+    mesh.setParam("glyph.camera", camera);
     mesh.commit();
     #endif
 
@@ -308,18 +396,6 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     world.setParam("instance", cpp::CopiedData(instance));
     world.setParam("light", cpp::CopiedData(lights));
     world.commit();
-
-    cam_eye = arcball.eye();
-    glm::vec3 cam_dir = arcball.dir();
-    cam_up = arcball.up();
-
-    cpp::Camera camera("perspective");
-    camera.setParam("aspect", static_cast<float>(win_width) / win_height);
-    camera.setParam("position", cam_eye);
-    camera.setParam("direction", cam_dir);
-    camera.setParam("up", cam_up);
-    camera.setParam("fovy", 40.f);
-    camera.commit();
 
     cpp::FrameBuffer fb(win_width, win_height, OSP_FB_SRGBA, OSP_FB_COLOR | OSP_FB_ACCUM);
     fb.clear();

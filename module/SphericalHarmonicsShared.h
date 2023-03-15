@@ -4,6 +4,7 @@
 #pragma once
 
 #include "geometry/GeometryShared.h"
+#include "camera/PerspectiveCameraShared.h"
 
 #ifdef __cplusplus
 namespace ispc {
@@ -15,6 +16,7 @@ struct SphericalHarmonics {
     Data1D coefficients;
     uint32 degreeL;
     float* boundRadius;
+    PerspectiveCamera* camera;
 
 #ifdef __cplusplus
   SphericalHarmonics() : degreeL(0) {}
