@@ -32,7 +32,9 @@ namespace tensor_geometry {
             embreeGeometry = rtcNewGeometry(embreeDevice, RTC_GEOMETRY_TYPE_USER);
         }
         vertexData = getParamDataT<vec3f>("glyph.position", true);
+        boundRadiusData = getParamDataT<float>("glyph.boundRadius");
         coefficientData = getParamDataT<float>("glyph.coefficients");
+        rotatedCoefficientData = getParamDataT<float>("glyph.rotatedCoefficients");
         degreeL = getParam<int>("glyph.degreeL");
         auto cam = (PerspectiveCamera*)getParamObject("glyph.camera");
 
@@ -41,8 +43,9 @@ namespace tensor_geometry {
                                  (RTCOccludedFunctionN)&ispc::SphericalHarmonics_occluded);
         getSh()->vertex = *ispc(vertexData);
         getSh()->coefficients = *ispc(coefficientData);
+        getSh()->rotatedCoefficients = *ispc(rotatedCoefficientData);
         getSh()->degreeL = degreeL;
-        getSh()->boundRadius = new float[vertexData->size()];
+        getSh()->boundRadius = *ispc(boundRadiusData);
         getSh()->camera = cam->getSh();
 
         postCreationInfo();

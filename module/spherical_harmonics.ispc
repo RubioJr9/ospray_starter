@@ -48,27 +48,12 @@ export void SphericalHarmonics_bounds(const RTCBoundsFunctionArguments *uniform 
 {
     SphericalHarmonics *uniform self = (SphericalHarmonics * uniform) args->geometryUserPtr;
     uniform int primID = args->primID;
-    const uint32 coeffsCount = 15;
-    const uniform float* c = (const uniform float*)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
+
     const uniform vec3f center = get_vec3f(self->vertex, primID);
-
-    const uniform float sqrt3 = sqrt(3.f);
-    const uniform float invPi4 = 0.25 / PI;
-    uniform float lCoeffs[] = {invPi4, 5.f*invPi4, 9.f*invPi4};
-
-    uniform float uniform c2[15];
-    for (int i = 0; i < 15; ++i)
-        c2[i] = c[i]*c[i];
-    uniform float squareSum[] = {c2[0],
-                                 c2[1]+c2[2]+c2[3]+c2[4]+c2[5],
-                                 c2[6]+c2[7]+c2[8]+c2[9]+c2[10]+c2[11]+c2[12]+c2[13]+c2[14]};
-
-
-    uniform float v = sqrt3 * sqrt(lCoeffs[0]*squareSum[0] + lCoeffs[1]*squareSum[1] + lCoeffs[2]*squareSum[2]);
-    self->boundRadius[primID] = v;
+    uniform float r = get_float(self->boundRadius, primID);
 
     box3fa *uniform out = (box3fa * uniform) args->bounds_o;
-    *out = make_box3fa(center + make_vec3f(-v,-v,-v), center + make_vec3f(v,v,v));
+    *out = make_box3fa(center + make_vec3f(-r,-r,-r), center + make_vec3f(r,r,r));
 }
 
 void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
@@ -93,7 +78,9 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     const uniform vec3f center = get_vec3f(self->vertex, primID);
     const uint32 coeffsCount = 15;
     const uniform float* coeffs = (const uniform float*)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
-    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, self->degreeL, self->boundRadius[primID], hitData, self->camera);
+    const uniform float* rotatedCoeffs = (const uniform float*)(self->rotatedCoefficients.addr + self->rotatedCoefficients.byteStride * primID * coeffsCount);
+    uniform float r = get_float(self->boundRadius, primID);
+    Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, rotatedCoeffs, self->degreeL, r, hitData, self->camera);
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);

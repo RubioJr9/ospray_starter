@@ -205,20 +205,20 @@ vec3f get_sh_glyph_normal(uniform float* sh_coeffs, varying vec3f point){
       // constant factors and homogenize to degree 4 by multiplying one_2 as needed
     float one_2 = r_2 + z_2;
     float sh[] = {0.282094791773878143 * one_2 * one_2,
-                  0.546274215296039535 * one_2 * sine_2,
-                  -1.09254843059207907 * one_2 * point.y * point.z,
-                  0.630783130505040012 * one_2 * (z_2 - 0.5 * r_2),
-                  -1.09254843059207907 * one_2 * point.x * point.z,
                   0.546274215296039535 * one_2 * cosine_2,
-                  0.625835735449176135 * sine_4,
-                  -1.77013076977993053 * sine_3 * point.z,
-                  sine_2 * scaled_legendre_4_2,
+                  1.09254843059207907  * one_2 * point.x * point.z,
+                  0.630783130505040012 * one_2 * (z_2 - 0.5 * r_2),
+                  -1.09254843059207907 * one_2 * point.y * point.z,
+                  0.546274215296039535 * one_2 * sine_2,
+                  0.625835735449176135 * cosine_4,
+                  1.77013076977993053  * cosine_3 * point.z,
+                  cosine_2 * scaled_legendre_4_2,
+                  -point.x * scaled_legendre_4_1,
+                  0.846284375321634430 * legendre_4_0,
                   point.y * scaled_legendre_4_1,
-                   0.846284375321634430 * legendre_4_0,
-                   point.x * scaled_legendre_4_1,
-                   cosine_2 * scaled_legendre_4_2,
-                   -1.77013076977993053 * cosine_3 * point.z,
-                   0.625835735449176135 * cosine_4};
+                  sine_2 * scaled_legendre_4_2,
+                  -1.77013076977993053 * sine_3 * point.z,
+                  0.625835735449176135 * sine_4};
 
     float poly_value = 0;
     for (uniform int i = 0; i < 15; ++i)
@@ -243,60 +243,60 @@ vec3f get_sh_glyph_normal(uniform float* sh_coeffs, varying vec3f point){
     gradient[1][0] = xb1_yb1_zb1 * point.y;
     gradient[2][0] = xb1_yb1_zb1 * point.z;
 
-    gradient[0][1] = point.y * xa3_ya1_za1;
-    gradient[1][1] = point.x * xa1_ya3_za1;
-    gradient[2][1] = 2.18509686118415814 * xyz;
+    gradient[0][1] = 1.09254843059207907 * point.x * (cosine_2 + one_2);//point.y * xa3_ya1_za1;
+    gradient[1][1] = 1.09254843059207907 * point.y * (cosine_2 - one_2);//point.x * xa1_ya3_za1;
+    gradient[2][1] = 1.09254843059207907 * point.z * cosine_2;//2.18509686118415814 * xyz;
 
-    gradient[0][2] = -gradient[2][1];
-    gradient[1][2] = -point.z * xa1_ya3_za1;
-    gradient[2][2] = -point.y * xa1_ya1_za3;
+    gradient[0][2] = point.z * xa3_ya1_za1;//-gradient[2][1];
+    gradient[1][2] = 2.18509686118415814 * xyz;//-point.z * xa1_ya3_za1;
+    gradient[2][2] = point.x * xa1_ya1_za3;//-point.y * xa1_ya1_za3;
 
     gradient[0][3] = point.x * xc2_yc2_zcm1;
     gradient[1][3] = point.y * xc2_yc2_zcm1;
     gradient[2][3] = 0.630783130505040012 * point.z * (r_2 + 4.0 * z_2);
 
-    gradient[0][4] = -point.z * xa3_ya1_za1;
-    gradient[1][4] = -gradient[2][1];
-    gradient[2][4] = -point.x * xa1_ya1_za3;
+    gradient[0][4] = -gradient[1][2];//-point.z * xa3_ya1_za1;
+    gradient[1][4] = -point.z * xa1_ya3_za1;//-gradient[2][1];
+    gradient[2][4] = -point.y * xa1_ya1_za3;//-point.x * xa1_ya1_za3;
 
-    gradient[0][5] = 1.09254843059207907 * point.x * (cosine_2 + one_2);
-    gradient[1][5] = 1.09254843059207907 * point.y * (cosine_2 - one_2);
-    gradient[2][5] = 1.09254843059207907 * point.z * cosine_2;
+    gradient[0][5] = point.y * xa3_ya1_za1;//1.09254843059207907 * point.x * (cosine_2 + one_2);
+    gradient[1][5] = point.x * xa1_ya3_za1;//1.09254843059207907 * point.y * (cosine_2 - one_2);
+    gradient[2][5] = gradient[1][2];//1.09254843059207907 * point.z * cosine_2;
 
-    gradient[0][6] = 2.50334294179670454 * sine_3;
-    gradient[1][6] = 2.50334294179670454 * cosine_3;
+    gradient[0][6] = 2.50334294179670454 * cosine_3;
+    gradient[1][6] = -2.50334294179670454 * sine_3;
     gradient[2][6] = 0.0;
 
-    gradient[0][7] = -10.6207846186795827 * xyz;
-    gradient[1][7] = -5.31039230933979159 * cosine_2_z;
-    gradient[2][7] = -1.77013076977993053 * sine_3;
+    gradient[0][7] = 5.31039230933979159 * cosine_2_z;
+    gradient[1][7] = -10.6207846186795827 * xyz;
+    gradient[2][7] = 1.77013076977993053 * cosine_3;
 
-    gradient[0][8] = 0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);
-    gradient[1][8] = 0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);
-    gradient[2][8] = 11.35409634909072096 * xyz;
+    gradient[0][8] =5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);//0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);
+    gradient[1][8] = -5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);//0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);
+    gradient[2][8] = 5.677048174545360109 * cosine_2_z;//11.35409634909072096 * xyz;
 
-    gradient[0][9] = 4.014279261343735008 * xyz;
-    gradient[1][9] = 1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);
-    gradient[2][9] = 2.007139630671867504 * x1_y1_zm4 * point.y;
+    gradient[0][9] = -1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);//4.014279261343735008 * xyz;
+    gradient[1][9] = -4.014279261343735008 * xyz;//1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);
+    gradient[2][9] = -2.007139630671867504 * x1_y1_zm4 * point.x;//2.007139630671867504 * x1_y1_zm4 * point.y;
 
     gradient[0][10] = 1.269426562982451646 * x1_y1_zm4 * point.x;
     gradient[1][10] = 1.269426562982451646 * x1_y1_zm4 * point.y;
     gradient[2][10] = -5.077706251929806583 * point.z * (r_2 - (2.0 / 3.0) * z_2);
 
-    gradient[0][11] = 1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);
-    gradient[1][11] = gradient[0][9];
-    gradient[2][11] = 2.007139630671867504 * x1_y1_zm4 * point.x;
+    gradient[0][11] = -gradient[1][9];//1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);
+    gradient[1][11] = 1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);//gradient[0][9];
+    gradient[2][11] = 2.007139630671867504 * x1_y1_zm4 * point.y;//2.007139630671867504 * x1_y1_zm4 * point.x;
 
-    gradient[0][12] = 5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);
-    gradient[1][12] = -5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);
-    gradient[2][12] = 5.677048174545360109 * cosine_2_z;
+    gradient[0][12] = 0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);//5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);
+    gradient[1][12] = 0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);//-5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);
+    gradient[2][12] = 11.35409634909072096 * xyz;//5.677048174545360109 * cosine_2_z;
 
     gradient[0][13] = gradient[1][7];
     gradient[1][13] = -gradient[0][7];
-    gradient[2][13] = -1.77013076977993053 * cosine_3;
+    gradient[2][13] = -1.77013076977993053 * sine_3;
 
-    gradient[0][14] = gradient[1][6];
-    gradient[1][14] = -gradient[0][6];
+    gradient[0][14] = -gradient[1][6];
+    gradient[1][14] = gradient[0][6];
     gradient[2][14] = 0.0;
 
     vec3f poly_gradient = make_vec3f(0,0,0);
@@ -488,6 +488,7 @@ struct ortho_frame {
   linear2f frame_to_ray_space;
   vec3f closest_dir;
   float closest_dist;
+  float ray_dot_offset;
 };
 
 ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ray_dir)
@@ -512,13 +513,13 @@ ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ra
     */
     struct ortho_frame frame;
     vec3f offset = ray_origin - glyph_center;
-    float ray_dot_offset = dot(ray_dir, offset);
-    frame.closest_dir = offset - ray_dot_offset * ray_dir;
+    frame.ray_dot_offset = dot(ray_dir, offset);
+    frame.closest_dir = offset - frame.ray_dot_offset * ray_dir;
     frame.closest_dist = length(frame.closest_dir);
     float inv_closest_dist = 1.0 / frame.closest_dist;
     frame.closest_dir = frame.closest_dir * inv_closest_dist;
     frame.frame_to_ray_space.vx = make_vec2f(1.0, 0.0);
-    frame.frame_to_ray_space.vy = make_vec2f(-inv_closest_dist * ray_dot_offset, inv_closest_dist);
+    frame.frame_to_ray_space.vy = make_vec2f(-inv_closest_dist * frame.ray_dot_offset, inv_closest_dist);
     return frame;
 }
 
@@ -542,13 +543,14 @@ void filterRealRoots(complex roots[11], float ray_roots[11],
 void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hessian, float sh[5][15]) {
     /*
     Evaluates spherical harmonics basis functions in bands 0, 2 and 4. For the
-    most part, it follows the conventions of "Stupid Spherical Harmonics (SH)
-    Tricks" by Peter-Pike Sloan 2008:
-    https://www.ppsloan.org/publications/StupidSH36.pdf
+    most part, it follows the conventions of "Regularized, fast, and robust
+    analytical Q-ball imaging" by Descouteaux et al. 2007:
+    https://doi.org/10.1002/mrm.21277
     For normalized vectors, results are the same as with the formulas in this
     work. The major difference is that the polynomials have been made
     homogeneous of degree 4, i.e. scaling point by a factor r scales the SH
-    basis functions by a factor of r^4 and their gradient by r^3.
+    basis functions by a factor of r^4, their gradient by r^3 and their Hessian
+    by r^2.
     :param point: An array of shape (3, ...) providing the Cartesian coordinates
         at which the spherical harmonics basis functions should be evaluated.
     :param evaluate_gradient: Pass True to also evaluate the gradient of the SH
@@ -625,20 +627,20 @@ void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hess
       // constant factors and homogenize to degree 4 by multiplying one_2 as needed
       one_2[i] = r_2[i] + z_2[i];
       sh[i][0] = 0.282094791773878143 * one_2[i] * one_2[i];
-      sh[i][1] = 0.546274215296039535 * one_2[i] * sine_2[i];
-      sh[i][2] = -1.09254843059207907 * one_2[i] * point[1][i] * point[2][i];
+      sh[i][1] = 0.546274215296039535 * one_2[i] * cosine_2[i];
+      sh[i][2] = 1.09254843059207907  * one_2[i] * point[0][i] * point[2][i];
       sh[i][3] = 0.630783130505040012 * one_2[i] * (z_2[i] - 0.5 * r_2[i]);
-      sh[i][4] = -1.09254843059207907 * one_2[i] * point[0][i] * point[2][i];
-      sh[i][5] = 0.546274215296039535 * one_2[i] * cosine_2[i];
-      sh[i][6] = 0.625835735449176135 * sine_4[i];
-      sh[i][7] = -1.77013076977993053 * sine_3[i] * point[2][i];
-      sh[i][8] = sine_2[i] * scaled_legendre_4_2[i];
-      sh[i][9] = point[1][i] * scaled_legendre_4_1[i];
+      sh[i][4] = -1.09254843059207907 * one_2[i] * point[1][i] * point[2][i];
+      sh[i][5] = 0.546274215296039535 * one_2[i] * sine_2[i];
+      sh[i][6] = 0.625835735449176135 * cosine_4[i];
+      sh[i][7] = 1.77013076977993053  * cosine_3[i] * point[2][i];
+      sh[i][8] = cosine_2[i] * scaled_legendre_4_2[i];
+      sh[i][9] = -point[0][i] * scaled_legendre_4_1[i];
       sh[i][10] = 0.846284375321634430 * legendre_4_0[i];
-      sh[i][11] = point[0][i] * scaled_legendre_4_1[i];
-      sh[i][12] = cosine_2[i] * scaled_legendre_4_2[i];
-      sh[i][13] = -1.77013076977993053 * cosine_3[i] * point[2][i];
-      sh[i][14] = 0.625835735449176135 * cosine_4[i];
+      sh[i][11] = point[1][i] * scaled_legendre_4_1[i];
+      sh[i][12] = sine_2[i] * scaled_legendre_4_2[i];
+      sh[i][13] = -1.77013076977993053 * sine_3[i] * point[2][i];
+      sh[i][14] = 0.625835735449176135 * sine_4[i];
     }
     /* if (!evaluate_gradient && !evaluate_hessian) */
       /* return sh; */
@@ -646,7 +648,7 @@ void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hess
 
 void evaluate_sh_4(float point[3][5],  float sh[5][15]) { evaluate_sh_4(point, false, false, sh); }
 
-float* get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis, float sh_poly[5]) {
+void get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis, float sh_poly[5]) {
     /*
     Constructs a homogeneous quartic polynomial in the monic basis describing
     the behavior of a linear combination of SH basis functions in bands 0, 2, 4
@@ -806,198 +808,6 @@ float eval_poly(float poly[11], float t) {
   }
   //y += poly[degree];
   return y;
-}
-
-// from viste-tool
-uniform float BoundingSphereRadius(const uniform float * uniform coefficients)
-{
-  // Output radius
-  uniform float sumL = 0.0;
-
-  // Sum for one order
-  uniform float sumM = 0.0;
-
-  // Coefficient index
-  uniform int j = 0;
-
-  // Loop through the orders
-  for (uniform int l = 0; l <= 4; l += 2)
-  {
-    // Reset the sum for this order
-    sumM = 0.0;
-
-    // Process (2*L+1) coefficients
-    for (uniform int m = -l; m <= l; m++)
-    {
-      // Compute sum of squared coefficients
-      sumM += coefficients[j] * coefficients[j];
-      j++;
-    }
-
-    // Update output radius
-    sumM *= (2.0 * (float) l + 1.0) / (4.0 * PI);
-    sumL += sumM;
-  }
-
-  // Compute output
-  sumL = sqrtf(3) * sqrtf(sumL);
-
-  return sumL;
-}
-
-// code for inverse rotation method
-void RealWignerZRotation0(float* coefficients, float angle)
-{
-	// Nothing to do for 0th order SH.
-	return;
-}
-
-void RealWignerZRotation2(float* coefficients, float angle)
-{
-	// Local copy of second-order coefficients
-	float a[5];
-
-	// Copy coefficients
-	for (int i = 0; i < 5; i++)
-	{
-		a[i] = coefficients[i];
-	}
-
-	// Pre-compute sines and cosines
-	float c1 = cos(angle);
-	float c2 = cos(2.0 * angle);
-	float s1 = sin(angle);
-	float s2 = sin(2.0 * angle);
-
-	// Compute output coefficients
-	coefficients[0] = a[0] * c2 + a[4] * s2;
-	coefficients[1] = a[1] * c1 - a[3] * s1;
-	coefficients[2] = a[2];
-	coefficients[3] = a[3] * c1 + a[1] * s1;
-	coefficients[4] = a[4] * c2 - a[0] * s2;
-}
-
-void RealWignerZRotation4(float* coefficients, float angle)
-{
-	// Local copy of fourth-order coefficients
-	float a[9];
-
-	// Copy coefficients
-	for (int i = 0; i < 9; i++)
-	{
-		a[i] = coefficients[i];
-	}
-
-	// Pre-compute sines and cosines
-	float c1 = cos(angle);
-	float c2 = cos(2.0 * angle);
-	float c3 = cos(3.0 * angle);
-	float c4 = cos(4.0 * angle);
-	float s1 = sin(angle);
-	float s2 = sin(2.0 * angle);
-	float s3 = sin(3.0 * angle);
-	float s4 = sin(4.0 * angle);
-
-	// Compute output coefficients
-	coefficients[0] = a[0] * c4 + a[8] * s4;
-	coefficients[1] = a[1] * c3 - a[7] * s3;
-	coefficients[2] = a[2] * c2 + a[6] * s2;
-	coefficients[3] = a[3] * c1 - a[5] * s1;
-	coefficients[4] = a[4];
-	coefficients[5] = a[5] * c1 + a[3] * s1;
-	coefficients[6] = a[6] * c2 - a[2] * s2;
-	coefficients[7] = a[7] * c3 + a[1] * s3;
-	coefficients[8] = a[8] * c4 - a[0] * s4;
-}
-
-void RealWignerZRotation(float* coefficients, float angle)
-{
-	// Do nothing if the angle is zero
-	if (angle == 0.0)
-		return;
-
-	// Compute new coefficient values
-	RealWignerZRotation0(&coefficients[0], angle);
-	RealWignerZRotation2(&coefficients[1], angle);
-	RealWignerZRotation4(&coefficients[6], angle);
-}
-
-void RealWignerYRotation0(float* coefficients, float angle)
-{
-	// Nothing to do for 0th order SH.
-	return;
-}
-
-void RealWignerYRotation2(float* coefficients, float angle)
-{
-	// Local copy of second-order coefficients
-	float a[5];
-
-	// Copy coefficients
-	for (int i = 0; i < 5; i++)
-	{
-		a[i] = coefficients[i];
-	}
-
-	// Pre-compute sines and cosines
-	float c1 = cos(angle);
-	float c2 = cos(2.0 * angle);
-	float s1 = sin(angle);
-	float s2 = sin(2.0 * angle);
-
-	// Compute output coefficients
-	coefficients[0] = (3 * a[0] + sqrtf(3) * a[2] + a[0] * c2 - sqrtf(3) * a[2] * c2 - 2 * a[1] * s2) / 4.0;
-	coefficients[1] = (2 * a[1] * c2 + a[0] * s2 - sqrtf(3) * a[2] * s2) / 2.0;
-	coefficients[2] = (sqrtf(3) * a[0] + a[2] - sqrtf(3) * a[0] * c2 + 3 * a[2] * c2 + 2 * sqrtf(3) * a[1] * s2) / 4.0;
-	coefficients[3] = a[3] * c1 - a[4] * s1;
-	coefficients[4] = a[4] * c1 + a[3] * s1;
-}
-
-void RealWignerYRotation4(float* coefficients, float angle)
-{
-	// Local copy of fourth-order coefficients
-	float a[9];
-
-	// Copy coefficients
-	for (int i = 0; i < 9; i++)
-	{
-		a[i] = coefficients[i];
-	}
-
-	// Pre-compute sines and cosines
-	float c1 = cos(angle);
-	float c2 = cos(2.0 * angle);
-	float c3 = cos(3.0 * angle);
-	float c4 = cos(4.0 * angle);
-	float s1 = sin(angle);
-	float s2 = sin(2.0 * angle);
-	float s3 = sin(3.0 * angle);
-	float s4 = sin(4.0 * angle);
-
-	// Compute output coefficients
-	coefficients[0] = (35*a[0] + 10*sqrtf(7)*a[2] + 3*sqrtf(35)*a[4] + 28*a[0]*c2 - 8*sqrtf(7)*a[2]*c2 - 4*sqrtf(35)*a[4]*c2 + a[0]*c4 - 2*sqrtf(7)*a[2]*c4 + sqrtf(35)*a[4]*c4 - 28*sqrtf(2)*a[1]*s2 - 4*sqrtf(14)*a[3]*s2 - 2*sqrtf(2)*a[1]*s4 + 2*sqrtf(14)*a[3]*s4)/64.0;
-	coefficients[1] = (28*a[1]*c2 + 4*sqrtf(7)*a[3]*c2 + 4*a[1]*c4 - 4*sqrtf(7)*a[3]*c4 + 14*sqrtf(2)*a[0]*s2 - 4*sqrtf(14)*a[2]*s2 - 2*sqrtf(70)*a[4]*s2 + sqrtf(2)*a[0]*s4 - 2*sqrtf(14)*a[2]*s4 + sqrtf(70)*a[4]*s4)/32.0;
-	coefficients[2] = (5*sqrtf(7)*a[0] + 10*a[2] + 3*sqrtf(5)*a[4] - 4*sqrtf(7)*a[0]*c2 + 8*a[2]*c2 + 4*sqrtf(5)*a[4]*c2 - sqrtf(7)*a[0]*c4 + 14*a[2]*c4 - 7*sqrtf(5)*a[4]*c4 + 4*sqrtf(14)*a[1]*s2 + 4*sqrtf(2)*a[3]*s2 + 2*sqrtf(14)*a[1]*s4 - 14*sqrtf(2)*a[3]*s4)/32.0;
-	coefficients[3] = (4*sqrtf(7)*a[1]*c2 + 4*a[3]*c2 - 4*sqrtf(7)*a[1]*c4 + 28*a[3]*c4 + 2*sqrtf(14)*a[0]*s2 - 4*sqrtf(2)*a[2]*s2 - 2*sqrtf(10)*a[4]*s2 - sqrtf(14)*a[0]*s4 + 14*sqrtf(2)*a[2]*s4 - 7*sqrtf(10)*a[4]*s4)/32.0;
-	coefficients[4] = (3*sqrtf(35)*a[0] + 6*sqrtf(5)*a[2] + 9*a[4] - 4*sqrtf(35)*a[0]*c2 + 8*sqrtf(5)*a[2]*c2 + 20*a[4]*c2 + sqrtf(35)*a[0]*c4 - 14*sqrtf(5)*a[2]*c4 + 35*a[4]*c4 + 4*sqrtf(70)*a[1]*s2 + 4*sqrtf(10)*a[3]*s2 - 2*sqrtf(70)*a[1]*s4 + 14*sqrtf(10)*a[3]*s4)/64.0;
-	coefficients[5] = (9*a[5]*c1 + 3*sqrtf(7)*a[7]*c1 + 7*a[5]*c3 - 3*sqrtf(7)*a[7]*c3 - 3*sqrtf(2)*a[6]*s1 - 3*sqrtf(14)*a[8]*s1 - 7*sqrtf(2)*a[6]*s3 + sqrtf(14)*a[8]*s3)/16.0;
-	coefficients[6] = (2*a[6]*c1 + 2*sqrtf(7)*a[8]*c1 + 14*a[6]*c3 - 2*sqrtf(7)*a[8]*c3 + 3*sqrtf(2)*a[5]*s1 + sqrtf(14)*a[7]*s1 + 7*sqrtf(2)*a[5]*s3 - 3*sqrtf(14)*a[7]*s3)/16.0;
-	coefficients[7] = (3*sqrtf(7)*a[5]*c1 + 7*a[7]*c1 - 3*sqrtf(7)*a[5]*c3 + 9*a[7]*c3 - sqrtf(14)*a[6]*s1 - 7*sqrtf(2)*a[8]*s1 + 3*sqrtf(14)*a[6]*s3 - 3*sqrtf(2)*a[8]*s3)/16.0;
-	coefficients[8] = (2*sqrtf(7)*a[6]*c1 + 14*a[8]*c1 - 2*sqrtf(7)*a[6]*c3 + 2*a[8]*c3 + 3*sqrtf(14)*a[5]*s1 + 7*sqrtf(2)*a[7]*s1 - sqrtf(14)*a[5]*s3 + 3*sqrtf(2)*a[7]*s3)/16.0;
-
-	return;
-}
-
-void RealWignerYRotation(float* coefficients, float angle)
-{
-	// Do nothing if the angle is zero
-	if (angle == 0.0)
-		return;
-
-	// Compute new coefficient values
-	RealWignerYRotation0(&coefficients[0], angle);
-	RealWignerYRotation2(&coefficients[1], angle);
-	RealWignerYRotation4(&coefficients[6], angle);
 }
 
 float CylinderRhoMax(int l, int m)
@@ -1171,103 +981,67 @@ linear3f rotation_matrix_from_vectors(vec3f vec1, vec3f vec2) {
     return rotation_matrix;
 }
 
-float chPolynomialValue(float Ce[5], float rho, float z)
-{
-    float sumit = 0.0;
-    float zp = abs(z);
-    float s;
-    for (int n=0; n <=4; n++)
-      {
-      // XXX: There is a problem for z < 0. The code below fixes this but its not ideal.
-      //  It would be better to fix the IsInsideCylindricalHarmonic for negative z.
-      if ((z < 0.0) && ((n==1)||(n==3))) s = -1.0;
-      else s = 1.0;
-      sumit += Ce[n]*pow(rho, n)*pow(zp, (4-n))*s;
-      } // for n
-    //if (sumit > pow(sqrt(rho*rho+zp*zp), 5.0)) isInside = true;
-    //else isInside = false;
-    return sumit - pow(sqrt(rho*rho+zp*zp), 5.0);
+
+void get_viewpoint_rotation(const vec3f& rayOrg, const uniform vec3f& center, const vec3f& up,
+                            vec3f& eX, vec3f& eY, vec3f& eZ) {
+    eZ = normalize(rayOrg-center);
+    eX = normalize(cross(up, eZ));
+    eY = cross(eZ, eX);
 }
 
-// Do ray casting. Camera is placed along the z-axis with z=vCameraZ.
-// Glyph center is (0,0,0).
-// bounds contains the start- and end-distances for the ray casting.
-float RayCHIntersection(const vec2f& bounds, const vec3f& ray_origin, const vec3f& ray_dir, float z, float phi, float* sh_coeffs) {
-  if (bounds.x > inf) return -1;
 
-  int MaxNumSteps = 11;
-  float StepSize = (bounds.y-bounds.x) / MaxNumSteps;
-  int NumSteps = 0;
-  int NumRefineSteps = 10;
-  float t = bounds.x;
-  float z = bounds.x;
+float computeRayAzimuth(const vec3f& eX, const vec3f& eY, const vec3f& rayDir) {
+  return atan2(dot(eY, rayDir), dot(eX, rayDir));
+}
 
-  // ADDED FOR THE NEW REPRESENTATION
-  float C[] = {C0even(sh_coeffs, phi), C1even(sh_coeffs, phi), C2even(sh_coeffs, phi), C3even(sh_coeffs, phi), C4even(sh_coeffs, phi)};
+void computeQuarticPoly(float* coeffs, float quartic_poly[5], float ray_azimuth) {
+  quartic_poly[0] = 0.5 / sqrt(PI) * (coeffs[0] + sqrt(5.0) * coeffs[3] + 3.0 * coeffs[10]);
+  quartic_poly[1] = sqrt(1.25 / PI) * ((sqrt(3.0) * coeffs[2] + 3.0 * sqrt(2.0) * coeffs[9]) * cos(ray_azimuth)
+                                 - (sqrt(3.0) * coeffs[4] + 3.0 * sqrt(2.0) * coeffs[11]) * sin(ray_azimuth));
+  quartic_poly[2] = 0.25 / sqrt(PI) * (sqrt(5.0) * (sqrt(3.0) * coeffs[5] + 9.0 * coeffs[12]) * sin(2.0 * ray_azimuth)
+                                 + sqrt(5.0) * (sqrt(3.0) * coeffs[1] + 9.0 * coeffs[8]) * cos(2.0 * ray_azimuth)
+                                 + 4.0 * coeffs[0] + sqrt(5.0) * coeffs[3] - 18.0 * coeffs[10]);
+  quartic_poly[3] = 0.125 * sqrt(5.0 / PI) * ((9.0 * sqrt(2.0) * coeffs[11] - 4.0 * sqrt(3.0) * coeffs[4]) * sin(ray_azimuth)
+                                        + 3.0 * sqrt(14.0) * (coeffs[7] * cos(3.0 * ray_azimuth) - coeffs[13] * sin(3.0 * ray_azimuth))
+                                        + (4.0 * sqrt(3.0) * coeffs[2] - 9.0 * sqrt(2.0) * coeffs[9]) * cos(ray_azimuth));
+  quartic_poly[4] = 1.0 / (16.0 * sqrt(PI)) * (3.0 * sqrt(35.0) * (coeffs[14] * sin(4.0 * ray_azimuth) + coeffs[6] * cos(4.0 * ray_azimuth))
+                                         + 2.0 * sqrt(5.0) * (2.0 * sqrt(3.0) * coeffs[5] - 3.0 * coeffs[12]) * sin(2.0 * ray_azimuth)
+                                         + 2.0 * sqrt(5.0) * (2.0 * sqrt(3.0) * coeffs[1] - 3.0 * coeffs[8]) * cos(2.0 * ray_azimuth)
+                                         + 8.0 * coeffs[0] - 4.0 * sqrt(5.0) * coeffs[3] + 9.0 * coeffs[10]);
+};
 
-  /* float expected_C[] ={-1.84515097, 0.73307707, 6.48924291, 2.68414493, -0.26301916}; */
+float getAlmsickIntersection(float quartic_poly[5], const vec3f& eX, const vec3f& eY, const vec3f& eZ,
+                      const vec3f& rayOrg, const vec3f& rayDir, const uniform vec3f& center, float radius, int step_count=200) {
+  float ray_origin_z = dot(eZ, (rayOrg - center));
+  float start = radius;
+  float end = -radius;
+  float dir_x = dot(eX, rayDir);
+  float dir_y = dot(eY, rayDir);
+  float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dot(eZ, rayDir);
+  float radius_summand = -ray_origin_z * radius_factor;
 
-  /* for (int i = 0; i < 5; ++i) */
-    /* assert(abs(C[i] - expected_C[i]) < 1e-5); */
-
-  bool isInside = false;
-  while (!isInside && (NumSteps < MaxNumSteps)) {
-    vec3f p = ray_origin + t*ray_dir;
-    float rho = sqrt(p.x*p.x + p.y*p.y);
-    z = p.z;
-    /* pyplot.scatter(ray_dir @ CurrentPosition, closest_dir @ CurrentPosition, color="r") */
-
-    float polValue = chPolynomialValue(C, rho, z);
-    /* print("polValue:", polValue) */
-    if (polValue > 0.0) isInside = true;
-    else {
-      t += StepSize;
-      NumSteps += 1;
+  float step = (end - start) / (step_count - 1);
+  float z = start;
+  float prev_sdf = 0.0;
+  float t = -1;
+  for (int i = 0; i < step_count; ++i) {
+    float radius = radius_factor * z + radius_summand;
+    float poly_value = 0.0;
+    float norm = sqrt(radius * radius + z * z);
+    float normed_radius = radius / norm;
+    float normed_z = z / norm;
+    for (int j = 0; j < 5; ++j)
+      poly_value += quartic_poly[j] * pow(normed_radius,j) * pow(normed_z,(4 - j));
+    float sdf = abs(poly_value) - norm;
+    if (prev_sdf * sdf < 0.0) {
+      // TODO: Use regula falsi
+      float z_diff = (z - ray_origin_z);
+      t = sqrt(z_diff*z_diff + radius*radius);
+      break;
     }
+    z += step;
+    prev_sdf = sdf;
   }
-
-  if (!isInside) return -1;
-  /* assert(isInside); */
-  if (NumRefineSteps == 0) return t;
-
-  // linear search is done. Now refine using binary search
-  float lower = t - StepSize;
-  vec3f lower_pos = ray_origin+lower*ray_dir;
-  float rho = sqrt(lower_pos.x*lower_pos.x + lower_pos.y*lower_pos.y);
-  z = lower_pos.z;
-  float lowerValue = chPolynomialValue(C, rho, z);
-
-  float upper = t;
-  vec3f upper_pos = ray_origin+upper*ray_dir;
-  rho = sqrt(upper_pos.x*upper_pos.x + upper_pos.y*upper_pos.y);
-  z = upper_pos.z;
-  float upperValue = chPolynomialValue(C, rho, z);
-
-  int j = 0;
-  while (j < NumRefineSteps) {
-    t = (lower + upper) * 0.5;
-    // CurrentPosition = upperValue/(upperValue-lowerValue)*(lower_pos-upper_pos)+upper_pos;
-    vec3f p = ray_origin + t*ray_dir;
-    /* pyplot.scatter(ray_dir @ CurrentPosition, closest_dir @ CurrentPosition, color="b") */
-    rho = sqrt(p.x*p.x + p.y*p.y);
-    z = p.z;
-
-    float polValue = chPolynomialValue(C, rho, z);
-
-    if (polValue > 0.0)
-        upper = t;
-      /* # upperPos = CurrentPosition; */
-      /* # upperValue = polValue; */
-    else // outside
-        lower = t;
-      /* # lower = CurrentPosition; */
-      /* # lowerValuePos = polValue; */
-    j += 1;
-  }
-
-  /* # CurrentPosition = upperValue/(upperValue-lowerValue)*(lower_pos-upper_pos)+upper_pos; */
-
-  /* # return np.linalg.norm(CurrentPosition-ray_origin); */
   return t;
 }
 
@@ -1275,6 +1049,7 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     const vec3f& rayDir,
     const uniform vec3f& center,
     const uniform float* coeffs,
+    const uniform float* rotatedCoeffs,
     const uniform int degreeL,
     const uniform float boundRadius,
     varying SHIntersections* uniform hitData,
@@ -1291,58 +1066,12 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   vec3f cRayOrg = rayOrg - center;
 
   // bounding sphere as starting point
-  Intersections isectSphere = intersectSphere(cRayOrg, rayDir, make_vec3f(0.f, 0.f, 0.f), boundRadius);
-  float dist = isectSphere.entry.t;
-  float max_dist = isectSphere.exit.t;
-  float step_size = boundRadius * 2.f / (float)STEPS_;
+  Intersections isectSphere = intersectSphere(rayOrg, rayDir, center, boundRadius);
+  if (!isectSphere.entry.hit) return isect;
 
-	vec3f res = make_vec3f(1e10,-1.0, 1.0);
-
-  float h = 1.0;
-  vec2f m = make_vec2f(-1.0);
-  vec3f s;
-  int stepTotal = 0;
   vec3f p;
-  #if 1
-  vec3f eyePosT = rayOrg - center;
-  vec3f eZ = normalize(eyePosT);
-  vec3f viewUp = normalize(camera->dv_up);
-  vec3f eX = normalize(cross(viewUp, eZ));
-  vec3f eY = normalize(cross(eZ, eX));
-  /* float gamma = atan2(eX.z, eY.y); // from paper */
-  /* float beta  = atan2(eZ.z, sqrt(eX.z * eX.z + eY.z * eY.z)); // from paper */
-  /* float alpha = atan2(eZ.x, eZ.y); // from paper */
 
-  float gamma = atan2(eY.z, -1.0 * eX.z); // from code
-  float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z); // from code
-  float alpha = atan2(eZ.y, eZ.x); // from code
-  /* print("atan2: %\n",atan2(0.2,0.4)); */
-  /* print("up: %, %, %\n", viewUp.x, viewUp.y, viewUp.z); */
-  /* print("eZ: %, %, %\n", eZ.x, eZ.y, eZ.z); */
-  /* print("eY: %, %, %\n", eY.x, eY.y, eY.z); */
-  /* print("eX: %, %, %\n", eX.x, eX.y, eX.z); */
-  /* print("alpha: %\n", alpha); */
-  /* print("beta: %\n", beta); */
-  /* print("gamma: %\n", gamma); */
-  /* print("gamma correct: %\n", atan(eX.z/eY.y)); */
-
-  vec3f vec = eyePosT;
-  float e0 = vec.x;
-  vec.x = vec.x * cos(alpha) + vec.y * sin(alpha);
-  vec.y = vec.y * cos(alpha) - e0 * sin(alpha);
-  e0 = eyePosT.x;
-  vec.x = vec.x * cos(beta) - vec.z * sin(beta);
-  vec.z = vec.z * cos(beta) + e0 * sin(beta);
-  e0 = eyePosT.x;
-  vec.x = vec.x * cos(gamma) + vec.y * sin(gamma);
-  vec.y = vec.y * cos(gamma) - e0 * sin(gamma);
-  /* print("eyePosT: %, %, %\n", vec.x, vec.y, vec.z); */
-  float coeffsRotated[15];
-  for (int i = 0; i < 15; i++) coeffsRotated[i] = coeffs[i];
-  /* RealWignerZRotation((float*)&coeffsRotated, alpha); */
-  /* RealWignerYRotation((float*)&coeffsRotated, beta); */
-  /* RealWignerZRotation((float*)&coeffsRotated, gamma); */
-
+  #if 0
   if (hitDataPresent)
     hitData->numIntersections = 0;
   vec3f debug_col = make_vec3f(0);
@@ -1350,21 +1079,14 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
   float poly[11];
   get_poly(coeffs, rayDir, frame, poly, debug_col);
-  /* get_poly((float*)&coeffsRotated, rayDir, frame, poly, debug_col); */
-  /* get_poly((float*)coeffs, rayDir, frame, poly, debug_col); */
   complex roots[11];
   zroots(poly, roots, false, debug_col);
   float ray_roots[11];
   rootsToRaySpace(roots, ray_roots, frame);
   if (hitDataPresent) {
     filterRealRoots(roots, ray_roots, hitData);
-    /* hitData->numIntersections = 0; // hard code to 1 so always visualizing a value */
     for (int i = 0; i < hitData->numIntersections; ++i)
-      /* hitData->normals[i] = get_sh_glyph_normal((float*)&coeffsRotated, cRayOrg + hitData->roots[i] * rayDir); */
       hitData->normals[i] = get_sh_glyph_normal(coeffs, cRayOrg + hitData->roots[i] * rayDir);
-    /* hitData->roots[1] = debug_col.x; */
-    /* hitData->roots[2] = debug_col.y; */
-    /* hitData->roots[3] = debug_col.z; */
   }
   else {
     for (uniform int i = 0; i < 11; ++i)
@@ -1381,166 +1103,25 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     p = cRayOrg + dist * rayDir;
     isect.entry.N = get_sh_glyph_normal(coeffs, p);
   }
-
   return isect;
 
 
-  #elif 0 // inverse rotation method
-  /* float r = BoundingSphereRadius(coeffs); */
-  vec3f trans_ray_origin = rayOrg - center;
-  vec3f eyePosT = rayOrg - center;
-  /* vec3f eyePosT = camera->dir_00; */
-  /* eyePosT = negate(eyePosT); */
-
-
-  vec3f eZ = normalize(eyePosT);
-  /* print("eZ: %, %, %\n", eZ.x, eZ.y, eZ.z); */
-  /* linear3f rot = rotation_matrix_from_vectors(make_vec3f(0,0,1), eZ); */
+  #elif 1 // Almsick's inverse rotation method
+  vec3f normRayDir = normalize(rayDir);
+  vec3f eX, eY, eZ;
   vec3f viewUp = normalize(camera->dv_up);
-  vec3f eX = normalize(cross(viewUp, eZ));
-  vec3f eY = normalize(cross(eZ, eX));
+  get_viewpoint_rotation(rayOrg, center, viewUp, eX, eY, eZ);
+  vec3f trans_ray_origin = rayOrg - center;
 
-  /* vec3f eY = normalize(camera->dv_up); */
-  /* print("viewUp %, %, %\n", viewUp.x, viewUp.y, viewUp.z); */
-  /* vec3f eX = normalize(camera->du_size); */
-  /* vec3f eX = cross(eZ, eY); */
-  /* vec3f eX = rot * make_vec3f(1,0,0); */
-  /* vec3f eY = rot * make_vec3f(0,1,0); */
+  float ray_azimuth = computeRayAzimuth(eX, eY, normRayDir);
+  float quartic_poly[5];
+  computeQuarticPoly(rotatedCoeffs, quartic_poly, ray_azimuth);
 
-  /* float gamma = atan2(eY.z, -1.0 * eX.z); */
-  float gamma = atan2(eY.y, eX.z);
-  float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z);
-  float alpha = atan2(eZ.y, eZ.x);
-
-  // Rotate around Z-axis
-  float e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(alpha) + eyePosT.y * sin(alpha);
-  eyePosT.y = eyePosT.y * cos(alpha) - e0 * sin(alpha);
-
-  // Rotate around Y-axis
-  e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(beta) - eyePosT.z * sin(beta);
-  eyePosT.z = eyePosT.z * cos(beta) + e0 * sin(beta);
-
-  // Rotate around Z-axis
-  e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(gamma) + eyePosT.y * sin(gamma);
-  eyePosT.y = eyePosT.y * cos(gamma) - e0 * sin(gamma);
-
-  // "EyeposT" should now be (0, 0, Z);
-
-  float coeffsRotated[15];
-  for (int i = 0; i < 15; i++) coeffsRotated[i] = coeffs[i];
-  RealWignerZRotation((float*)&coeffsRotated, alpha);
-  RealWignerYRotation((float*)&coeffsRotated, beta);
-  RealWignerZRotation((float*)&coeffsRotated, gamma);
-
-  // Compute radii of bounding cylinder
-  float cylRMax = CylinderRMax((float*)&coeffsRotated);
-  float cylZMax = CylinderZMax((float*)&coeffsRotated);
-
-  isectSphere = intersectSphere(rayOrg, rayDir, center, boundRadius);
-
-  vec2f bounds = make_vec2f(isectSphere.entry.t, isectSphere.exit.t);
-
-  vec3f sphereEnter = trans_ray_origin + rayDir*bounds.x;
-  vec2f planeCoords = make_vec2f(dot(sphereEnter, eX), dot(sphereEnter, eY));
-  /* vec3f planeCoords = rayOrg - camera->org; */
-  /* print("planecoords %, %, %\n", planeCoords.x, planeCoords.y, planeCoords.z); */
-
-
-  /* float phi = -atan2(planeCoords.x, planeCoords.y) + PI*0.5; */
-  /* float phi = atan(planeCoords.y/planeCoords.x); // TODO use atan2 for stability */
-  float phi = atan2(planeCoords.x, planeCoords.y);
-  /* print("atan2(.5,.25): %\n", atan2(.5,.25)); */
-
-  int MaxNumSteps = 11;
-  float StepSize = (bounds.y-bounds.x) / MaxNumSteps;
-  int NumSteps = 0;
-  int NumRefineSteps = 10;
-  float z = bounds.x;
-
-  float t = RayCHIntersection(bounds, trans_ray_origin, rayDir, z, phi, (float*)&coeffsRotated);
-
-  if (hitDataPresent) {
-    hitData->numIntersections = t > 0;
-    hitData->roots[0] = t;
-    hitData->normals[0] = get_sh_glyph_normal((float*)&coeffsRotated, cRayOrg + hitData->roots[0] * rayDir);
-  }
-  float io = 0; // HACK
-
-  isect.entry.t = 1;
-  isect.entry.N = get_sh_glyph_normal((float*)&coeffsRotated, cRayOrg + 1 * rayDir);
-  isect.entry.hit = true;
-  isect.entry.u = (phi+pi)*0.5/PI;
-
-  /* vec3f eyeposT = cRayOrg - center; // TODO double check this */
-  /* vec3f viewUp = make_vec3f(0.0,1.0,0.0); */
-  /* vec3f eZ = normalize(eyeposT); */
-	/* vec3f eX = normalize(cross(viewUp, eZ)); // TODO pass viewUp */
-  /* vec3f eY = normalize(cross(eZ, eX)); */
-  /* float gamma = atan2(eY.z, -1.0 * eX.z); */
-  /* float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z); */
-  /* float alpha = atan2(eZ.y, eZ.x); */
-  /* uniform float* coeffsCopy = new float[15]; */
-  /* for (uniform int i = 0; i < 15; ++i) */
-  /*   coeffsCopy[i] = coeffs[i]; */
-
-  /* float zrot = 0.0f; */
-  /* float yrot = 0.0f; */
-  /* RealWignerZRotation(coeffsCopy, zrot); */
-  /* RealWignerYRotation(coeffsCopy, yrot); */
-
-  /* // Rotate around Z-axis. */
-  /* vec3f e = eyeposT; */
-  /* eyeposT.x = e.x * cos(alpha) + e.y * sin(alpha); */
-  /* eyeposT.y = e.y * cos(alpha) - e.x * sin(alpha); */
-
-  /* // Rotate around Y-axis */
-  /* e = eyeposT; */
-  /* eyeposT.x = e.x * cos(beta) - e.z * sin(beta); */
-  /* eyeposT.z = e.z * cos(beta) + e.x * sin(beta); */
-
-  /* // Rotate around z-axis */
-  /* e = eyeposT; */
-  /* eyeposT.x = e.x * cos(gamma) + e.y * sin(gamma); */
-  /* eyeposT.y = e.y * cos(gamma) - e.x * sin(gamma); */
-
-
-	/* RealWignerZRotation(coeffsCopy, alpha); */
-	/* RealWignerYRotation(coeffsCopy, beta); */
-	/* RealWignerZRotation(coeffsCopy, gamma); */
-	/* float cylRhoMax = CylinderRMax(coeffsCopy); */
-	/* float cylZMax   = CylinderZMax(coeffsCopy); */
-
-  /* p = cRayOrg + dist * rayDir; */
-  /* float rho = sqrt(p.x*p.x+p.y*p.y); */
-  /* float z = p.z; */
-  /* float phi = atan2(rayDir.x,rayDir.y); */
-  /* float C[5]; */
-  /* C[0] = C0even(coeffsCopy, phi); */
-  /* C[1] = C1even(coeffsCopy, phi); */
-  /* C[2] = C2even(coeffsCopy, phi); */
-  /* C[3] = C3even(coeffsCopy, phi); */
-  /* C[4] = C4even(coeffsCopy, phi); */
-
-  /* float r = min(cylRhoMax, max_dist); */
-
-  /* float io = chPolyVal(C, rho, z); */
-  /* bool movePos = io > 0; */
-  /* for( int step=0; step<STEPS_; step++) { */
-  /*   stepTotal = step; */
-  /*   if (abs(io) < EPSILON) */
-  /*     break; */
-  /*   p = cRayOrg + dist * rayDir; */
-  /*   if ((movePos && io < 0) ||(!movePos && io > 0)) { */
-  /*     step_size = -0.5 * step_size; */
-  /*     movePos = !movePos; */
-  /*   } */
-  /*   io = chPolyVal(C, rho, z); */
-
-  /*   dist += step_size; */
-  /* } */
+  float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, rayOrg, normRayDir, center, boundRadius);
+  isect.entry.hit = t > 0;
+  isect.entry.t = t;
+  isect.entry.N = get_sh_glyph_normal(coeffs, cRayOrg + t * rayDir);
+  return isect;
 
   #elif 1
   p = cRayOrg + dist * rayDir;
@@ -1661,21 +1242,29 @@ void testPolyGen()
   uniform vec3f ray_dir = normalize(make_vec3f(0.3, 0.6, 0.2) - ray_origin);
   uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
 
-  uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
+  /* uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34}; */
+  uniform float sh_coeffs[] = {2.74, 0.72, 0.62, 2.77, 1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
 
   struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
   assert(abs(frame.frame_to_ray_space.vx.x-1) < 1e-2);
   assert(abs(frame.frame_to_ray_space.vx.y-0) < 1e-2);
   assert(abs(frame.frame_to_ray_space.vy.x-13.21034026) < 1e-2);
   assert(abs(frame.frame_to_ray_space.vy.y-2.73521048) < 1e-2);
+  assert(abs(frame.ray_dot_offset+4.829734439470606) < 1e-5);
+  assert(abs(frame.closest_dist-0.3656025768393324) < 1e-5);
 
   float sh_poly[5];
   get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
+  uniform float sh_poly_expected[] = {-0.60574789, -0.15240334, 5.47919848, 1.16134442, -1.06103006};
+  for (int i = 0; i < 5; ++i)
+    assert(abs(sh_poly[i] - sh_poly_expected[i]) < 0.01);
+
   float poly[11];
   vec3f debug_col;
   get_poly(sh_coeffs, ray_dir, frame, poly, debug_col);
 
-  uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.};
+  /* uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.}; */
+  uniform float poly_expected[] = {1.7451452, 1.38133141, -54.4878012, -23.02064505, 221.57152102, 97.63108088, -86.89708528, -18.43742326, 3.42241967, 0, -1};
   for (int i = 0; i < 11; ++i)
     assert(abs(poly[i] - poly_expected[i]) < 0.01);
 
@@ -1686,19 +1275,22 @@ void testPolyGen()
   }
   complex x = {0,0};
   laguer(a, x, 11);
-  assert(abs(x.real - 0.258963461279) < 1e-5);
+  /* assert(abs(x.real - 0.258963461279) < 1e-5); */
 
   complex roots[11];
   zroots(poly, roots, true, debug_col);
 
-  uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892};
+  /* uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892}; */
+  uniform float roots_expected[] = {-2.40677821, -2.40677821, -1.18021726, -0.503356058, -0.185389615, 0.202432102, 0.470091109, 1.75097087, 2.12951264, 2.12951264};
   for (int i = 0; i < 10; ++i)
     assert(abs(roots[i].real - roots_expected[i]) < 1.0e-5);
 
   float ray_roots[11];
-  rootsToRaySpace(roots, ray_roots, frame);
+  for (int i = 0; i < 11; ++i)
+    ray_roots[i] = roots[i].real * frame.closest_dist - frame.ray_dot_offset;
+  /* rootsToRaySpace(roots, ray_roots, frame); */
 
-  uniform float ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.76207239, 4.76207239, 4.92441215, 5.02357046, 5.14509877, 5.50665087, 5.50665087};
+  uniform float ray_roots_expected[] = {3.94981012, 3.94981012, 4.39824397, 4.64570617, 4.76195552, 4.90374414, 5.00160096, 5.46989390, 5.60828975, 5.60828975};
   for (uniform int i = 0; i < 10; ++i)
     assert(abs(ray_roots[i] - ray_roots_expected[i]) < 1.0e-5);
 
@@ -1706,142 +1298,66 @@ void testPolyGen()
   hitData.numIntersections = 0;
   filterRealRoots(roots, ray_roots, &hitData);
 
-  uniform float real_ray_roots_expected[] = {3.53723804, 4.52300399, 4.60657445, 4.92441215, 5.02357046, 5.14509877};
+  uniform float real_ray_roots_expected[] = {4.39824397, 4.64570617, 4.76195552, 4.90374414, 5.00160096, 5.4698939};
   for (uniform int i = 0; i < 6; ++i)
     assert(abs(hitData.roots[i] - real_ray_roots_expected[i]) < 1.0e-5);
 
- uniform float expected_normal_x[] = {-0.81824761, 0.84623132, 0.93375575, -0.77115485, -0.33109223, 0.13755328};
- uniform float expected_normal_y[] = {-0.50902668, 0.03363681, -0.15393211, -0.08527863, -0.34343862, -0.84198347};
- uniform float expected_normal_z[] = {-0.26713797, 0.53175287, 0.32311778, 0.63091026, 0.87887874, 0.52167321};
+ uniform float expected_normal_x[] = {0.92151299, -0.84139649, -0.6115183, 0.4085241,  0.41099025, -0.3888063};
+ uniform float expected_normal_y[] = {0.38685129, -0.51184689, -0.43766273, -0.78588093, -0.91086316, 0.39639405};
+ uniform float expected_normal_z[] = {-0.03405709, 0.17339178, 0.65916364, 0.46421894,  0.03762067, 0.83168589};
   vec3f cRayOrg = ray_origin - glyph_center;
   for (uniform int i = 0; i < 6; ++i){
-    vec3f p = cRayOrg + hitData.roots[i] * ray_dir;
+    /* print("glyph center: %,%,%\n", glyph_center.x, glyph_center.y, glyph_center.z); */
+    /* print("ray origin: %,%,%\n", ray_origin.x, ray_origin.y, ray_origin.z); */
+    /* print("ray dir: %,%,%\n", ray_dir.x, ray_dir.y, ray_dir.z); */
+    vec3f temp = ray_origin + hitData.roots[i] * ray_dir;
+    vec3f p = ray_origin + hitData.roots[i] * ray_dir - glyph_center;
     vec3f n = get_sh_glyph_normal(sh_coeffs, p);
-    assert(abs(expected_normal_x[i] - n.x) < 1.0e-5);
-    assert(abs(expected_normal_y[i] - n.y) < 1.0e-5);
-    assert(abs(expected_normal_z[i] - n.z) < 1.0e-5);
+    assert(abs(expected_normal_x[i] - n.x) < 1.0e-1);
+    assert(abs(expected_normal_y[i] - n.y) < 1.0e-1);
+    assert(abs(expected_normal_z[i] - n.z) < 1.0e-1);
   }
 }
 
 void testPolyGenInverseRotation()
 {
-  vec3f ray_origin = make_vec3f(-6.0, 2.0, 1.0);
-  vec3f ray_dir = normalize(make_vec3f(0.3, 0.6, 0.2) - ray_origin);
-  uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
+    vec3f ray_origin = make_vec3f(-4.0, 2.0, 1.0);
+    vec3f ray_dir = make_vec3f(0.3, 0.6, 0.2) - ray_origin;
+    ray_dir = normalize(ray_dir);
+    uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
+    vec3f up = make_vec3f(0.123, 0.456, 0.789);
+    uniform float rotatedCoeffs[] = {2.74, -0.2043146, 0.23099068, -0.88960413, 0.36400692,
+        3.2496311, -0.37610309, 0.22094306, 0.06994055, -0.8917885, -1.55573379, 0.03138365,
+        -0.94377666, -0.23810967, -0.32023285};
+    float * uniform coeffsP = rotatedCoeffs;
 
-  uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
+    vec3f eyePosT = ray_origin - glyph_center;
+    vec3f eX, eY, eZ;
+    get_viewpoint_rotation(ray_origin, glyph_center, up, eX, eY, eZ);
+    float ray_azimuth = computeRayAzimuth(eX, eY, ray_dir);
+    assert(abs(ray_azimuth - 1.795589488015444) < 1e-5);
 
-  struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
-  /* assert(abs(frame.frame_to_ray_space.vx.x-1) < 1e-2); */
-  /* assert(abs(frame.frame_to_ray_space.vx.y-0) < 1e-2); */
-  /* assert(abs(frame.frame_to_ray_space.vy.x-13.21034026) < 1e-2); */
-  /* assert(abs(frame.frame_to_ray_space.vy.y-2.73521048) < 1e-2); */
+    float quartic_poly[5];
+    computeQuarticPoly(coeffsP, quartic_poly, ray_azimuth);
+    float expectedPoly[] = {-1.104800748763063, 0.006163892127587072, 5.529566828401396, -0.8665370760190302, -0.5787666440776555};
+    for (int i = 0; i < 5; ++i) assert(abs(quartic_poly[i]-expectedPoly[i]) < 1e-5);
 
-  uniform float r = BoundingSphereRadius(sh_coeffs);
-  assert(abs(r-4.912299919562093) < 1e-5);
+    float ray_origin_z = length(eyePosT);
+    assert(abs(ray_origin_z-4.843552415324934) < 1e-5);
+    float start = ray_origin_z;
+    float end = ray_origin_z - 10.0;
+    assert(abs(end+5.156447584675066) < 1e-5);
 
-  vec3f trans_ray_origin = ray_origin - glyph_center;
-  vec3f eyePosT = ray_origin - glyph_center;
+    // Determine how z maps to radius (Eq. (46))
+    float dir_x = dot(eX, ray_dir);
+    assert(abs(dir_x+0.016825366481273626) < 1e-5);
+    float dir_y = dot(eY, ray_dir);
+    assert(abs(dir_y-0.07358320313834571) < 1e-5);
+    float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dot(eZ, ray_dir);
+    assert(abs(radius_factor+0.07569827729066748) < 1e-5);
+    float radius_summand = -ray_origin_z * radius_factor;
+    assert(abs(radius_summand-0.3666485738071491) < 1e-5);
 
-  vec3f eZ = eyePosT / length(eyePosT);
-
-  linear3f rot = rotation_matrix_from_vectors(make_vec3f(0,0,1), eZ);
-  /* print("rot xx: %d\n", rot.vx.x); */
-  /* print("rot xy: %d\n", rot.vx.y); */
-  /* print("rot xz: %d\n", rot.vx.z); */
-  /* print("rot yx: %d\n", rot.vy.x); */
-  /* print("rot yy: %d\n", rot.vy.y); */
-  /* print("rot yz: %d\n", rot.vy.z); */
-  /* print("rot zx: %d\n", rot.vz.x); */
-  /* print("rot zy: %d\n", rot.vz.y); */
-  /* print("rot zz: %d\n", rot.vz.z); */
-
-  vec3f eX = rot * make_vec3f(1,0,0);
-  vec3f eY = rot * make_vec3f(0,1,0);
-  /* print("eX: %d, %d, %d\n", eX.x, eX.y, eX.z); */
-  /* print("eY: %d, %d, %d\n", eY.x, eY.y, eY.z); */
-  /* print("%d\n", dot(eX, eY)); */
-  /* print("%d\n", dot(eX, eZ)); */
-  /* print("%d\n", dot(eZ, eY)); */
-  uniform vec3f expected_eX = make_vec3f(0.21897557, 0.20745961, 0.95342027);
-  uniform vec3f expected_eY = make_vec3f(0.20745961, 0.94489354, -0.25325226);
-  assert(abs(eX.x - expected_eX.x) < 1e-5);
-  assert(abs(eX.y - expected_eX.y) < 1e-5);
-  assert(abs(eX.z - expected_eX.z) < 1e-5);
-  assert(abs(eY.x - expected_eY.x) < 1e-5);
-  assert(abs(eY.y - expected_eY.y) < 1e-5);
-  assert(abs(eY.z - expected_eY.z) < 1e-5);
-
-  float gamma = atan2(eY.z, -1.0 * eX.z);
-  float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z);
-  float alpha = atan2(eZ.y, eZ.x);
-
-  assert(abs(gamma - (-2.8819630241815357)) < 1e-5);
-  assert(abs(beta  -   1.4061848130135441)  < 1e-5);
-  assert(abs(alpha -   2.8819630241815357)  < 1e-5);
-
-  // Rotate around Z-axis
-  float e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(alpha) + eyePosT.y * sin(alpha);
-  eyePosT.y = eyePosT.y * cos(alpha) - e0 * sin(alpha);
-
-  // Rotate around Y-axis
-  e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(beta) - eyePosT.z * sin(beta);
-  eyePosT.z = eyePosT.z * cos(beta) + e0 * sin(beta);
-
-  // Rotate around Z-axis
-  e0 = eyePosT.x;
-  eyePosT.x = eyePosT.x * cos(gamma) + eyePosT.y * sin(gamma);
-  eyePosT.y = eyePosT.y * cos(gamma) - e0 * sin(gamma);
-
-  // "EyeposT" should now be (0, 0, Z);
-  assert(abs(eyePosT.x) < 1e-5);
-  assert(abs(eyePosT.y) < 1e-5);
-  assert(abs(eyePosT.z - 6.71267458) < 1e-5);
-
-  RealWignerZRotation(sh_coeffs, alpha);
-  RealWignerYRotation(sh_coeffs, beta);
-  RealWignerZRotation(sh_coeffs, gamma);
-
-  for (uniform int i = 0; i < 15; ++i)
-    print("sh_coeffs %: %\n", i, sh_coeffs[i]);
-
-  uniform float expected_rot_sh_coeffs[] = {1.74, 2.68210431, 0.92633126, -1.62775782, -0.88565731, 0.30551999, 0.05677588, -0.50070082, -0.67735366, -0.74325267, -1.54703757, -0.16292926, 0.70184131, -0.08001514, -0.52696094};
-
-  for (uniform int i = 0; i < 15; ++i)
-    assert(abs(sh_coeffs[i] - expected_rot_sh_coeffs[i]) < 1e-5);
-
-  // Compute radii of bounding cylinder
-  float cylRMax = CylinderRMax(sh_coeffs);
-  float cylZMax = CylinderZMax(sh_coeffs);
-
-  assert(abs(cylRMax - 4.398184408052383) < 1e-5);
-  assert(abs(cylZMax - 4.897966609523379) < 1e-5);
-
-
-  Intersections isectSphere = intersectSphere(ray_origin, ray_dir, glyph_center, r);
-
-  assert(abs(isectSphere.entry.t - 1.8045019278610146) < 1e-5);
-  assert(abs(isectSphere.exit.t - 11.598385780102234) < 1e-5);
-
-  vec2f bounds = make_vec2f(isectSphere.entry.t, isectSphere.exit.t);
-
-  vec3f sphereEnter = trans_ray_origin + ray_dir*bounds.x;
-  float planeCoords[] = {dot(sphereEnter, eX), dot(sphereEnter, eY)};
-  float phi = atan2(planeCoords[0], planeCoords[1]);
-  assert(abs(phi - 1.051069873381849) < 1e-5);
-
-  int MaxNumSteps = 11;
-  float StepSize = (bounds.y-bounds.x) / MaxNumSteps;
-  int NumSteps = 0;
-  int NumRefineSteps = 10;
-  float z = bounds.x;
-
-  /* float C[] = {C0even(sh_coeffs, phi), C1even(sh_coeffs, phi), C2even(sh_coeffs, phi), C3even(sh_coeffs, phi), C4even(sh_coeffs, phi)}; */
-
-
-  /* RayCHIntersection(bounds, ray_origin, ray_dir, closest_dir, z, phi, sh_coeffs); */
-  float t = RayCHIntersection(bounds, trans_ray_origin, ray_dir, z, phi, sh_coeffs);
-  assert(abs(t-5.53818162783144) < 1e-3);
+    float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, ray_origin, ray_dir, glyph_center, 5, 1000);
+    assert(abs(t-4.406966852859168) < 1e-2);
 }

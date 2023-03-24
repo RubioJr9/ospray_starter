@@ -14,8 +14,9 @@ struct SphericalHarmonics {
     Geometry super;
     Data1D vertex;
     Data1D coefficients;
+    Data1D rotatedCoefficients;
     uint32 degreeL;
-    float* boundRadius;
+    Data1D boundRadius;
     PerspectiveCamera* camera;
 
 #ifdef __cplusplus

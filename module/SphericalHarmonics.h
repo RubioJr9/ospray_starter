@@ -23,7 +23,9 @@ namespace tensor_geometry {
 
     protected:
         Ref<const DataT<vec3f>> vertexData;
+        Ref<const DataT<float>> boundRadiusData;
         Ref<const DataT<float>> coefficientData;
+        Ref<const DataT<float>> rotatedCoefficientData;
         uint32 degreeL{0};
     };
 }}

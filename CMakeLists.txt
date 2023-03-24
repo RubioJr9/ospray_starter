@@ -16,6 +16,8 @@ find_package(SDL2 REQUIRED)
 find_package(OpenGL REQUIRED)
 include(cmake/glm.cmake)
 
+find_package (Eigen3 3.3 NO_MODULE)
+
 add_subdirectory(imgui)
 add_subdirectory(util)
 add_subdirectory(module)
