@@ -810,10 +810,10 @@ float eval_poly(float poly[11], float t) {
   return y;
 }
 
-float CylinderRhoMax(int l, int m)
+uniform float CylinderRhoMax(uniform int l, uniform int m)
 {
 	// Output value
-	float result = 0.0;
+	uniform float result = 0.0;
 
 	// Hard-coded results for all combinations of "l" and "m"
 	     if ((l == 0) && (m ==  0))		result = 0.282095;
@@ -835,10 +835,10 @@ float CylinderRhoMax(int l, int m)
 	return result;
 }
 
-float CylinderZMax(int l, int m)
+uniform float CylinderZMax(uniform int l, uniform int m)
 {
 	// Output value
-	float result = 0.0;
+	uniform float result = 0.0;
 
 	// Hard-coded results for all combinations of "l" and "m"
 	     if ((l == 0) && (m ==  0))		result = 0.282095;
@@ -860,24 +860,24 @@ float CylinderZMax(int l, int m)
 	return result;
 }
 
-float CylinderRMax(float* coefficients)
+uniform float CylinderRMax(float uniform* uniform coefficients)
 {
 	// Output radius
-	float sumL = 0.0;
+	uniform float sumL = 0.0;
 
 	// Sum for one order
-	float sumM = 0.0;
+	uniform float sumM = 0.0;
 
 	// Coefficient index
-	int j = 0;
+	uniform int j = 0;
 
 	// Loop through the orders
-	for (int l = 0; l <= 4; l += 2) {
+	for (uniform int l = 0; l <= 4; l += 2) {
 		// Reset the sum for this order
 		sumM = 0.0;
 
 		// Process (2*L+1) coefficients
-		for (int m = -l; m <= l; m++) {
+		for (uniform int m = -l; m <= l; m++) {
 			sumM += abs(coefficients[j]) * CylinderRhoMax(l, m);
 			j++;
 		}
@@ -886,26 +886,26 @@ float CylinderRMax(float* coefficients)
 	return sumL;
 }
 
-float CylinderZMax(float* coefficients)
+uniform float CylinderZMax(float uniform* uniform coefficients)
 {
 	assert(coefficients != NULL);
 
 	// Output radius
-	float sumL = 0.0;
+	uniform float sumL = 0.0;
 
 	// Sum for one order
-	float sumM = 0.0;
+	uniform float sumM = 0.0;
 
 	// Coefficient index
-	int j = 0;
+	uniform int j = 0;
 
 	// Loop through the orders
-	for (int l = 0; l <= 4; l += 2) {
+	for (uniform int l = 0; l <= 4; l += 2) {
 		// Reset the sum for this order
 		sumM = 0.0;
 
 		// Process (2*L+1) coefficients
-		for (int m = -l; m <= l; m++) {
+		for (uniform int m = -l; m <= l; m++) {
 			sumM += abs(coefficients[j]) * CylinderZMax(l, m);
 			j++;
 		}
@@ -1010,14 +1010,15 @@ void computeQuarticPoly(float* coeffs, float quartic_poly[5], float ray_azimuth)
                                          + 8.0 * coeffs[0] - 4.0 * sqrt(5.0) * coeffs[3] + 9.0 * coeffs[10]);
 };
 
-float getAlmsickIntersection(float quartic_poly[5], const vec3f& eX, const vec3f& eY, const vec3f& eZ,
-                      const vec3f& rayOrg, const vec3f& rayDir, const uniform vec3f& center, float radius, int step_count=200) {
+float getAlmsickIntersection(float poly[5], const vec3f& eX, const vec3f& eY, const vec3f& eZ,
+                      const vec3f& rayOrg, const vec3f& rayDir, const uniform vec3f& center, const vec2f& bounds, int step_count=200) {
   float ray_origin_z = dot(eZ, (rayOrg - center));
-  float start = radius;
-  float end = -radius;
+  float start = bounds.x;
+  float end = -bounds.y;
   float dir_x = dot(eX, rayDir);
   float dir_y = dot(eY, rayDir);
-  float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dot(eZ, rayDir);
+  float dir_z = dot(eZ, rayDir);
+  float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dir_z;
   float radius_summand = -ray_origin_z * radius_factor;
 
   float step = (end - start) / (step_count - 1);
@@ -1027,15 +1028,17 @@ float getAlmsickIntersection(float quartic_poly[5], const vec3f& eX, const vec3f
   for (int i = 0; i < step_count; ++i) {
     float radius = radius_factor * z + radius_summand;
     float poly_value = 0.0;
+    float q = radius / z;
+    poly_value = (((poly[4]*q+poly[3])*q+poly[2])*q+poly[1])*q+poly[0];
     float norm = sqrt(radius * radius + z * z);
     float normed_radius = radius / norm;
     float normed_z = z / norm;
-    for (int j = 0; j < 5; ++j)
-      poly_value += quartic_poly[j] * pow(normed_radius,j) * pow(normed_z,(4 - j));
+    float normed_z2 = normed_z*normed_z;
+    poly_value *= normed_z2*normed_z2;
     float sdf = abs(poly_value) - norm;
     if (prev_sdf * sdf < 0.0) {
-      // TODO: Use regula falsi
-      float z_diff = (z - ray_origin_z);
+      float intersect_z = z + sdf * step / (prev_sdf - sdf);
+      float z_diff = (intersect_z - ray_origin_z);
       t = sqrt(z_diff*z_diff + radius*radius);
       break;
     }
@@ -1045,11 +1048,53 @@ float getAlmsickIntersection(float quartic_poly[5], const vec3f& eX, const vec3f
   return t;
 }
 
+vec2f intersectCylinderCaps(const vec3f& rayOrg, const vec3f& rayDir, uniform float radius, uniform float height) {
+  const uniform vec3f v0 = make_vec3f(0,0,-height);
+  const uniform vec3f v1 = make_vec3f(0,0,height);
+  Intersections isectCyl = intersectCylinder(rayOrg, rayDir, v0, v1, radius);
+  uniform vec4f plane0 = make_vec4f(0,0,1,height);
+  uniform vec4f plane1 = make_vec4f(0,0,1,-height);
+  Hit plane0Hit = intersectPlane(rayOrg, rayDir, plane0);
+  Hit plane1Hit = intersectPlane(rayOrg, rayDir, plane1);
+  vec3f p0 = rayOrg+rayDir*isectCyl.entry.t;
+  vec3f p1 = rayOrg+rayDir*isectCyl.exit.t;
+  vec3f planeP0 = rayOrg+rayDir*plane0Hit.t;
+  vec3f planeP1 = rayOrg+rayDir*plane1Hit.t;
+  planeP0.z = 0;
+  planeP1.z = 0;
+  float planeP0R = length(planeP0);
+  float planeP1R = length(planeP1);
+  plane0Hit.hit = plane0Hit.hit && planeP0R < radius;
+  plane1Hit.hit = plane1Hit.hit && planeP1R < radius;
+  // Cylinder not hit
+  if (!isectCyl.entry.hit && !isectCyl.exit.hit) {
+    bool p0Closer = plane0Hit.t < plane1Hit.t;
+    isectCyl.entry = p0Closer ? plane0Hit : plane1Hit;
+    isectCyl.exit = p0Closer ? plane1Hit : plane0Hit;
+  }
+  // Only one hit on cylinder
+  if (!isectCyl.entry.hit) {
+    if (plane0Hit.hit) isectCyl.entry = plane0Hit;
+    else if (plane1Hit.hit) isectCyl.entry = plane1Hit;
+  }
+  if (!isectCyl.exit.hit) {
+    if (plane0Hit.hit) isectCyl.exit = plane0Hit;
+    else if (plane1Hit.hit) isectCyl.exit = plane1Hit;
+  }
+  isectCyl.entry.u = isectCyl.entry.t < isectCyl.exit.t;
+
+  vec3f cylP0 = rayOrg + rayDir*isectCyl.entry.t;
+  vec3f cylP1 = rayOrg + rayDir*isectCyl.exit.t;
+  vec2f cylBounds = make_vec2f(length(cylP0), length(cylP1));
+
+  return cylBounds;
+}
+
 inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
     const vec3f& rayDir,
     const uniform vec3f& center,
-    const uniform float* coeffs,
-    const uniform float* rotatedCoeffs,
+    const uniform float* uniform coeffs,
+    const uniform float* uniform rotatedCoeffs,
     const uniform int degreeL,
     const uniform float boundRadius,
     varying SHIntersections* uniform hitData,
@@ -1072,6 +1117,7 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   vec3f p;
 
   #if 0
+  float dist;
   if (hitDataPresent)
     hitData->numIntersections = 0;
   vec3f debug_col = make_vec3f(0);
@@ -1117,7 +1163,16 @@ inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
   float quartic_poly[5];
   computeQuarticPoly(rotatedCoeffs, quartic_poly, ray_azimuth);
 
-  float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, rayOrg, normRayDir, center, boundRadius);
+  float ray_origin_z = dot(eZ, (rayOrg - center));
+  vec2f bounds = make_vec2f(boundRadius);
+
+  uniform double cylRhoMax = CylinderRMax(coeffs);
+  uniform double cylZMax   = CylinderZMax(coeffs);
+
+  vec2f cylBounds = intersectCylinderCaps(cRayOrg, rayDir, cylRhoMax, cylZMax);
+  bounds.x = max(bounds.x, cylBounds.x);
+  bounds.y = max(bounds.y, cylBounds.y);
+  float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, rayOrg, normRayDir, center, bounds);
   isect.entry.hit = t > 0;
   isect.entry.t = t;
   isect.entry.N = get_sh_glyph_normal(coeffs, cRayOrg + t * rayDir);
@@ -1344,9 +1399,13 @@ void testPolyGenInverseRotation()
 
     float ray_origin_z = length(eyePosT);
     assert(abs(ray_origin_z-4.843552415324934) < 1e-5);
-    float start = ray_origin_z;
-    float end = ray_origin_z - 10.0;
-    assert(abs(end+5.156447584675066) < 1e-5);
+
+    vec2f bounds = make_vec2f(5);
+
+    uniform double cylRhoMax = CylinderRMax(rotatedCoeffs);
+    uniform double cylZMax   = CylinderZMax(rotatedCoeffs);
+
+    vec2f cylBounds = intersectCylinderCaps(ray_origin, ray_dir, cylRhoMax, cylZMax);
 
     // Determine how z maps to radius (Eq. (46))
     float dir_x = dot(eX, ray_dir);
@@ -1358,6 +1417,6 @@ void testPolyGenInverseRotation()
     float radius_summand = -ray_origin_z * radius_factor;
     assert(abs(radius_summand-0.3666485738071491) < 1e-5);
 
-    float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, ray_origin, ray_dir, glyph_center, 5, 1000);
+    float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, ray_origin, ray_dir, glyph_center, cylBounds, 1000);
     assert(abs(t-4.406966852859168) < 1e-2);
 }

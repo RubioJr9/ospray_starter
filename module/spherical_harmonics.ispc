@@ -76,9 +76,9 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
 
 
     const uniform vec3f center = get_vec3f(self->vertex, primID);
-    const uint32 coeffsCount = 15;
-    const uniform float* coeffs = (const uniform float*)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
-    const uniform float* rotatedCoeffs = (const uniform float*)(self->rotatedCoefficients.addr + self->rotatedCoefficients.byteStride * primID * coeffsCount);
+    const uniform uint32 coeffsCount = 15;
+    const uniform float* uniform coeffs = (const uniform float* uniform)(self->coefficients.addr + self->coefficients.byteStride * primID * coeffsCount);
+    const uniform float* uniform rotatedCoeffs = (const uniform float* uniform)(self->rotatedCoefficients.addr + self->rotatedCoefficients.byteStride * primID * coeffsCount);
     uniform float r = get_float(self->boundRadius, primID);
     Intersections isect = intersectSphericalHarmonics(ray->org, ray->dir, center, coeffs, rotatedCoeffs, self->degreeL, r, hitData, self->camera);
 
