@@ -16,8 +16,12 @@ ispc_target_add_sources(ospray_module_tensor_geometry
   SuperquadricIntersect.ih
   superquadric.cpp
   superquadric.ispc
+  bracketed_newton_bisection.ih
   SphericalHarmonicsIntersect.ih
+  sh.ih
+  wigner.ih
   SphericalHarmonics.cpp
+  SphericalHarmonicsIntersectRelatedWork.ih
   spherical_harmonics.ispc
   module_init.cpp
 )

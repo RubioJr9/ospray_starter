@@ -6,9 +6,10 @@
 #include "rkcommon/math/vec.ih"
 #include "math/AffineSpace.ih"
 #include "camera/PerspectiveCameraShared.h"
+#include "sh.ih"
+#include "bracketed_newton_bisection.ih"
 
-const uniform float EPSILON = 1e-3;
-const int STEPS_ = 70;
+#define NO_INTERSECTION 3.4e+38f
 
 struct SHIntersections
 {
@@ -16,1407 +17,202 @@ struct SHIntersections
   float roots[10];
   vec3f normals[10];
 };
-float sign(float v)
-{
-  return v < 0.f ? -1.f : 1.f;
-}
 
-#define k01 0.2820947918 // sqrt(  1/PI)/2
-#define k02 0.4886025119 // sqrt(  3/PI)/2
-#define k03 1.0925484306 // sqrt( 15/PI)/2
-#define k04 0.3153915652 // sqrt(  5/PI)/4
-#define k05 0.5462742153 // sqrt( 15/PI)/4
-#define k06 0.5900435860 // sqrt( 70/PI)/8
-#define k07 2.8906114210 // sqrt(105/PI)/2
-#define k08 0.4570214810 // sqrt( 42/PI)/8
-#define k09 0.3731763300 // sqrt(  7/PI)/4
-#define k10 1.4453057110 // sqrt(105/PI)/4
-#define k11 2.5033429418 // sqrt(35/PI)*3/4
-#define k12 1.7701307698 // sqrt(70/PI)*3/8
-#define k13 0.9461746958 // sqrt(5/PI)*3/4
-#define k14 0.6690465436 // sqrt(10/PI)*3/8
-#define k15 0.1057855469 // sqrt(1/PI)*3/16
-#define k16 0.4730873479 // sqrt(5/PI)*3/8
-#define k17 0.6258357355 // sqrt(35/PI)*3/16
-
-#define sqrt2 sqrt(2.f);
-#define four_pi_inv sqrt(four_pi);
-
-float genSH(int l, int m, vec3f) {
-  float condonShortley = (m % 2) ? -1.f : 1.f;
-  float val = condonShortley * sqrt2;
-  float inner = (2.f * l +1.f) * four_pi_inv;
-}
-
-#define INV_PI 1.0f/PI;
-
-float shFunctions(vec3f n, uniform float* c) {
-
-  const float r = length(n);
-  n = n/r; // normalize
-  /* n = make_vec3f(n.z, n.x, n.y); */
-
-  const float x =n.x;
-  const float y = n.y;
-  const float z = n.z;
-  const float x2 = x*x;
-  const float y2 = y*y;
-  const float z2 = z*z;
-  const float xy = x*y;
-  const float yz = y*z;
-  const float xz = x*z;
-  const float v5z2 = 5.f*z2;
-  const float v7z2 = 7.f*z2;
-  const float v3x2 = 3.f*x2;
-  const float v3y2 = 3.f*y2;
-  const float v7z2min1 = v7z2-1.f;
-  const float v7z2min3 = v7z2-3.f;
-  const float v5z2min1 = v5z2-1.f;
-  const float x2miny2 = x2-y2;
-  const float x2min3y2 = x2-v3y2;
-
-  #if 1 // hyper optimize
-  float v =
-   (c[0]*k01) // l=0, m=0
-  //----------------------------------------------------------
-	-k02*(c[1]*y-c[2]*z+c[3]*x)
-  //----------------------------------------------------------
-  +k03*(c[4]*xy-c[5]*yz-c[7]*xz+c[8]*0.5f*x2miny2)
-  +c[6]*(k04*(3.f*z2-1.f)) // l=2, m= 0
-  //----------------------------------------------------------
-  -k06*(c[9]*y*(v3x2-y2)+c[16]*x*(x2-v3y2))
-  +k07*z*(c[10]*xy+c[14]*0.5f*(x2miny2))
-  -k08*v5z2min1*(c[11]*y+c[13]*x)
-  +c[12]*(k09*z*(v5z2-3.f)) // l=3, m= 0
-  //----------------------------------------------------------
-  /* +k11*(c[16]*xy*x2miny2-0.5*(c[17]*yz*(v3x2-y2)+c[23]*xz*x2min3y2)+0.25f*c[24]*(x2*x2min3y2-y2*(v3x2-y2))); */
-  /* +k14*(-c[19]*y*v7z2min3-c[21]*x*v7z2min3) */
-  +c[16]*(k11*xy*(x2miny2)) // l=4, m=-4
-  -c[17]*(k12*yz*(v3x2-y2)) // l=4, m=-3
-  +c[18]*(k13*xy*(v7z2min1)) // l=4, m=-2
-  -c[19]*(k14*y*(v7z2min3)) // l=4, m=-1
-  +c[20]*(k15*(35.f*z2*z2-30.f*z2+3.f)) // l=4, m= 0
-  -c[21]*(k14*x*(v7z2min3)) // l=4, m= 1
-  +c[22]*(k16*(x2miny2)*(v7z2min1)) // l=4, m= 2
-  -c[23]*(k12*xz*(x2min3y2)) // l=4, m= 3
-  +c[24]*(k17*x2*(x2min3y2)-y2*(v3x2-y2)); // l=4, m= 4
-  return r-abs(v);
-#else //legible
-  const uniform float invPi4 = 0.25 / PI;
-  return
-   (
-   (c[0]*k01) // l=0, m=0
-   )*(invPi4)+
-  //----------------------------------------------------------
-	/* -c[1]*(k02*y) // l=1, m=-1 */
-  /* +c[2]*(k02*z) // l=1, m= 0 */
-  /* -c[3]*(k02*x) // l=1, m= 1 */
-  //----------------------------------------------------------
-  (
-	+c[1]*(k03*xy) // l=2, m=-2
-  -c[2]*(k03*yz) // l=2, m=-1
-  +c[3]*(k04*(3.f*z2-1.f)) // l=2, m= 0
-  -c[4]*(k03*xz) // l=2, m= 1
-  +c[5]*(k05*(x2miny2)) // l=2, m= 2
-   )*(5.f*invPi4)+
-  //----------------------------------------------------------
-  /* -c[9]*(k06*y*(v3x2-y2)) // l=3, m=-3 */
-  /* +c[10]*(k07*xy*z) // l=3, m=-2 */
-  /* -c[11]*(k08*y*(v5z2min1)) // l=3, m=-1 */
-  /* +c[12]*(k09*z*(v5z2-3.f)) // l=3, m= 0 */
-  /* -c[13]*(k08*x*(v5z2min1)) // l=3, m= 1 */
-  /* +c[14]*(k10*z*(x2miny2)) // l=3, m= 2 */
-  /* -c[15]*(k06*x*(x2-v3y2)) // l=3, m= 3 */
-  //----------------------------------------------------------
-  (
-  +c[6]*(k11*xy*(x2miny2)) // l=4, m=-4
-  -c[7]*(k12*yz*(v3x2-y2)) // l=4, m=-3
-  +c[8]*(k13*xy*(v7z2min1)) // l=4, m=-2
-  -c[9]*(k14*y*(v7z2min3)) // l=4, m=-1
-  +c[10]*(k15*(35.f*z2*z2-30.f*z2+3.f)) // l=4, m= 0
-  -c[11]*(k14*x*(v7z2min3)) // l=4, m= 1
-  +c[12]*(k16*(x2miny2)*(v7z2min1)) // l=4, m= 2
-  -c[13]*(k12*xz*(x2min3y2)) // l=4, m= 3
-  +c[14]*(k17*x2*(x2min3y2)-y2*(v3x2-y2)) // l=4, m= 4
-  )*(9.f*invPi4);
-  #endif
-
-}
-
-float SH(int l, int m, vec3f n) {
-  if( l==0 )          return  k01;
-  //----------------------------------------------------------
-	if (l==1 && m==-1) return -k02*n.y;
-  if (l==1 && m== 0) return  k02*n.z;
-  if (l==1 && m== 1) return -k02*n.x;
-  //----------------------------------------------------------
-	if (l==2 && m==-2) return  k03*n.x*n.y;
-  if (l==2 && m==-1) return -k03*n.y*n.z;
-  if (l==2 && m== 0) return  k04*(3.f*n.z*n.z-1.f);
-  if (l==2 && m== 1) return -k03*n.x*n.z;
-  if (l==2 && m== 2) return  k05*(n.x*n.x-n.y*n.y);
-  //----------------------------------------------------------
-  if (l==3 && m==-3) return -k06*n.y*(3.f*n.x*n.x-n.y*n.y);
-  if (l==3 && m==-2) return  k07*n.z*n.y*n.x;
-  if (l==3 && m==-1) return -k08*n.y*(5.f*n.z*n.z-1.f);
-  if (l==3 && m== 0) return  k09*n.z*(5.f*n.z*n.z-3.f);
-  if (l==3 && m== 1) return -k08*n.x*(5.f*n.z*n.z-1.f);
-  if (l==3 && m== 2) return  k10*n.z*(n.x*n.x-n.y*n.y);
-  if (l==3 && m== 3) return -k06*n.x*(n.x*n.x-3.f*n.y*n.y);
-  //----------------------------------------------------------
-  if (l==4 && m==-4) return  k11*n.x*n.y*(n.x*n.x-n.y*n.y);
-  if (l==4 && m==-3) return -k12*n.y*n.z*(3.f*n.x*n.x-n.y*n.y);
-  if (l==4 && m==-2) return  k13*n.x*n.y*(7.f*n.z*n.z-1.f);
-  if (l==4 && m==-1) return -k14*n.y*n.z*(7.f*n.z*n.z-3.f);
-  if (l==4 && m== 0) return  k15*(35.f*n.z*n.z*n.z*n.z-30.f*n.z*n.z+3.f);
-  if (l==4 && m== 1) return -k14*n.x*n.z*(7.f*n.z*n.z-3.f);
-  if (l==4 && m== 2) return  k16*(n.x*n.x-n.y*n.y)*(7.f*n.z*n.z-1.f);
-  if (l==4 && m== 3) return -k12*n.x*n.z*(n.x*n.x-3.f*n.y*n.y);
-  if (l==4 && m== 4) return  k17*n.x*n.x*(n.x*n.x-3.f*n.y*n.y)-n.y*n.y*(3.f*n.x*n.x-n.y*n.y);
-  //----------------------------------------------------------
-  return 0.0;
-}
-
-vec3f get_sh_glyph_normal(uniform float* sh_coeffs, varying vec3f point){
-    /* Computes a unit normal vector for a spherical harmonics glyph. */
-    /* :param sh_coeffs: Spherical harmonics coefficients for bands 0, 2 and 4. See */
-    /*     evaluate_sh_4() for their order. Array of shape (15, ...). */
-    /* :param point: The position on the glyph at which the normal should be */
-    /*     evaluated, relative to the glyph center. Shape (3, ...). */
-    /* :return: The normalized normal vector. Shape (3, ...). */
-    /* sh, gradient = evaluate_sh_4(offset, True); */
-
-    float z_2 = point.z * point.z;
-    float r_2 = point.x * point.x + point.y * point.y;
-    // Evaluate the relevant associated Legendre polynomials. At such low degree,
-    // the recurrent scheme is not worthwhile. We skip odd bands and constant or
-    // linear polynomials.
-    float legendre_4_0 = z_2 * (z_2 - 3.0*r_2) + 3.0/8.0 * r_2 * r_2;
-    float scaled_legendre_4_1 = 2.67618617422915667 * point.z * (-z_2 + 0.75 * r_2);
-    float scaled_legendre_4_2 = 2.83852408727268005 * (z_2 - (1.0 / 6.0) * r_2);
-      // Evaluate the Fourier basis. Again, we omit constant and linear terms.
-    float cosine_2 = r_2 - 2.0 * point.y * point.y;
-    float sine_2 = 2.0 * point.x * point.y;
-    float cosine_3 = point.x * cosine_2 - point.y * sine_2;
-    float sine_3 = point.x * sine_2 + point.y * cosine_2;
-    float cosine_4 = point.x * cosine_3 - point.y * sine_3;
-    float sine_4 = point.x * sine_3 + point.y * cosine_3;
-      // Assemble the Legendre polynomials and the Fourier basis with appropriate
-      // constant factors and homogenize to degree 4 by multiplying one_2 as needed
-    float one_2 = r_2 + z_2;
-    float sh[] = {0.282094791773878143 * one_2 * one_2,
-                  0.546274215296039535 * one_2 * cosine_2,
-                  1.09254843059207907  * one_2 * point.x * point.z,
-                  0.630783130505040012 * one_2 * (z_2 - 0.5 * r_2),
-                  -1.09254843059207907 * one_2 * point.y * point.z,
-                  0.546274215296039535 * one_2 * sine_2,
-                  0.625835735449176135 * cosine_4,
-                  1.77013076977993053  * cosine_3 * point.z,
-                  cosine_2 * scaled_legendre_4_2,
-                  -point.x * scaled_legendre_4_1,
-                  0.846284375321634430 * legendre_4_0,
-                  point.y * scaled_legendre_4_1,
-                  sine_2 * scaled_legendre_4_2,
-                  -1.77013076977993053 * sine_3 * point.z,
-                  0.625835735449176135 * sine_4};
-
-    float poly_value = 0;
-    for (uniform int i = 0; i < 15; ++i)
-      poly_value += sh[i] * sh_coeffs[i];
-
-    // Prepare a few common subexpressions. Many of them are linear in
-    // x^2, y^2, z^2 and named by the corresponding factors. a, b, c are
-    // various literals, m is -1.
-    float xa3_ya1_za1 = 1.09254843059207907 * (one_2 + 2.0 * point.x * point.x);
-    float xa1_ya3_za1 = 1.09254843059207907 * (one_2 + 2.0 * point.y * point.y);
-    float xa1_ya1_za3 = 1.09254843059207907 * (one_2 + 2.0 * z_2);
-    float xb1_yb1_zb1 = 1.128379167095512574 * one_2;
-    float xc2_yc2_zcm1 = -1.26156626101008002 * (r_2 - 0.5 * z_2);
-    float x1_y1_zm4 = r_2 - 4.0 * z_2;
-    float xyz = point.x * point.y * point.z;
-    float cosine_2_z = cosine_2 * point.z;
-    // Assemble the pieces to get the gradients. This is mostly just using
-    // the product rule but there is a lot of manual optimization on top of
-    // that. The gradient should be homogeneous of degree 3.
-    float gradient[3][15];
-    gradient[0][0] = xb1_yb1_zb1 * point.x;
-    gradient[1][0] = xb1_yb1_zb1 * point.y;
-    gradient[2][0] = xb1_yb1_zb1 * point.z;
-
-    gradient[0][1] = 1.09254843059207907 * point.x * (cosine_2 + one_2);//point.y * xa3_ya1_za1;
-    gradient[1][1] = 1.09254843059207907 * point.y * (cosine_2 - one_2);//point.x * xa1_ya3_za1;
-    gradient[2][1] = 1.09254843059207907 * point.z * cosine_2;//2.18509686118415814 * xyz;
-
-    gradient[0][2] = point.z * xa3_ya1_za1;//-gradient[2][1];
-    gradient[1][2] = 2.18509686118415814 * xyz;//-point.z * xa1_ya3_za1;
-    gradient[2][2] = point.x * xa1_ya1_za3;//-point.y * xa1_ya1_za3;
-
-    gradient[0][3] = point.x * xc2_yc2_zcm1;
-    gradient[1][3] = point.y * xc2_yc2_zcm1;
-    gradient[2][3] = 0.630783130505040012 * point.z * (r_2 + 4.0 * z_2);
-
-    gradient[0][4] = -gradient[1][2];//-point.z * xa3_ya1_za1;
-    gradient[1][4] = -point.z * xa1_ya3_za1;//-gradient[2][1];
-    gradient[2][4] = -point.y * xa1_ya1_za3;//-point.x * xa1_ya1_za3;
-
-    gradient[0][5] = point.y * xa3_ya1_za1;//1.09254843059207907 * point.x * (cosine_2 + one_2);
-    gradient[1][5] = point.x * xa1_ya3_za1;//1.09254843059207907 * point.y * (cosine_2 - one_2);
-    gradient[2][5] = gradient[1][2];//1.09254843059207907 * point.z * cosine_2;
-
-    gradient[0][6] = 2.50334294179670454 * cosine_3;
-    gradient[1][6] = -2.50334294179670454 * sine_3;
-    gradient[2][6] = 0.0;
-
-    gradient[0][7] = 5.31039230933979159 * cosine_2_z;
-    gradient[1][7] = -10.6207846186795827 * xyz;
-    gradient[2][7] = 1.77013076977993053 * cosine_3;
-
-    gradient[0][8] =5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);//0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);
-    gradient[1][8] = -5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);//0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);
-    gradient[2][8] = 5.677048174545360109 * cosine_2_z;//11.35409634909072096 * xyz;
-
-    gradient[0][9] = -1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);//4.014279261343735008 * xyz;
-    gradient[1][9] = -4.014279261343735008 * xyz;//1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);
-    gradient[2][9] = -2.007139630671867504 * x1_y1_zm4 * point.x;//2.007139630671867504 * x1_y1_zm4 * point.y;
-
-    gradient[0][10] = 1.269426562982451646 * x1_y1_zm4 * point.x;
-    gradient[1][10] = 1.269426562982451646 * x1_y1_zm4 * point.y;
-    gradient[2][10] = -5.077706251929806583 * point.z * (r_2 - (2.0 / 3.0) * z_2);
-
-    gradient[0][11] = -gradient[1][9];//1.837117307087383575 * point.z * (xa3_ya1_za1 - 2.549279671381517831 * z_2);
-    gradient[1][11] = 1.837117307087383575 * point.z * (xa1_ya3_za1 - 2.549279671381517831 * z_2);//gradient[0][9];
-    gradient[2][11] = 2.007139630671867504 * x1_y1_zm4 * point.y;//2.007139630671867504 * x1_y1_zm4 * point.x;
-
-    gradient[0][12] = 0.8660254037844386468 * point.y * (-xa3_ya1_za1 + 7.64783901414455349 * z_2);//5.677048174545360109 * point.x * (z_2 - (1.0 / 3.0) * point.x*point.x);
-    gradient[1][12] = 0.8660254037844386468 * point.x * (-xa1_ya3_za1 + 7.64783901414455349 * z_2);//-5.677048174545360109 * point.y * (z_2 - (1.0 / 3.0) * point.y*point.y);
-    gradient[2][12] = 11.35409634909072096 * xyz;//5.677048174545360109 * cosine_2_z;
-
-    gradient[0][13] = gradient[1][7];
-    gradient[1][13] = -gradient[0][7];
-    gradient[2][13] = -1.77013076977993053 * sine_3;
-
-    gradient[0][14] = -gradient[1][6];
-    gradient[1][14] = gradient[0][6];
-    gradient[2][14] = 0.0;
-
-    vec3f poly_gradient = make_vec3f(0,0,0);
-    for (int j = 0; j < 15; ++j) {
-      poly_gradient.x += gradient[0][j] * sh_coeffs[j];
-      poly_gradient.y += gradient[1][j] * sh_coeffs[j];
-      poly_gradient.z += gradient[2][j] * sh_coeffs[j];
-    }
-    float length_2 = point.x*point.x + point.y*point.y + point.z*point.z;
-    vec3f normal = length_2 * poly_gradient - 5.0 * poly_value * point;
-    return normalize(normal);
-}
-
-vec3f SHGradient(varying vec3f p,
-                 uniform float* coeffs)
-{
-  const float eps = 0.001;
-
-  const vec3f epsX = make_vec3f(eps,0.f,0.f);
-  const vec3f epsY = make_vec3f(0.f,eps,0.f);
-  const vec3f epsZ = make_vec3f(0.f,0.f,eps);
-
-  const float plusX = shFunctions(p + epsX, coeffs);
-  const float minX = shFunctions(p - epsX, coeffs);
-  const float plusY = shFunctions(p + epsY, coeffs);
-  const float minY = shFunctions(p - epsY, coeffs);
-  const float plusZ = shFunctions(p + epsZ, coeffs);
-  const float minZ = shFunctions(p - epsZ, coeffs);
-
-  return make_vec3f(plusX-minX, plusY-minY, plusZ-minZ);
-}
-
-struct complex {
-float real;
-float imaginary;
+// An orthogonal coordinate frame constructed from a view ray in relation to a
+// glyph
+struct orthogonal_frame_t {
+	// The normalized ray direction
+	vec3f ray_dir;
+	// The normalized direction vector from the glyph center to the closest
+	// point on the ray (or actually the infinite line)
+	vec3f closest_dir;
+	// The square of the minimal distance between the ray (or actually the
+	// infinite line) and the glyph center
+	float closest_dist_sq;
+	// The dot product between ray_dir and the offset from the glyph center to
+	// the ray origin
+	float ray_dot_offset;
 };
 
-struct complex plus(const struct complex& a, const struct complex& b)
-{
-  complex c;
-  c.real = a.real + b.real;
-  c.imaginary = a.imaginary + b.imaginary;
-  return c;
-}
 
-struct complex plus(const struct complex& a, float b)
-{
-  complex c;
-  c.real = a.real + b;
-  c.imaginary = a.imaginary;
-  return c;
-}
-
-struct complex minus(const struct complex& a, const struct complex& b)
-{
-  complex c;
-  c.real = a.real - b.real;
-  c.imaginary = a.imaginary - b.imaginary;
-  return c;
-}
-
-struct complex minus(const struct complex& a, float b)
-{
-  complex c;
-  c.real = a.real - b;
-  c.imaginary = a.imaginary;
-  return c;
-}
-
-struct complex times(const struct complex& a, const struct complex& b)
-{
-  complex c;
-  c.real = a.real * b.real - a.imaginary * b.imaginary;
-  c.imaginary = a.real * b.imaginary + a.imaginary * b.real;
-  return c;
-}
-
-struct complex times(const struct complex& a, float b)
-{
-  complex c;
-  c.real = a.real * b;
-  c.imaginary = a.imaginary * b;
-  return c;
-}
-
-struct complex conj(const struct complex& a)
-{
-  complex b;
-  b.real = a.real;
-  b.imaginary = -a.imaginary;
-  return b;
-}
-
-struct complex divide(const struct complex& a, const struct complex& b)
-{
-  struct complex ret;
-  float denom = (b.real*b.real+b.imaginary*b.imaginary);
-  ret.real = (a.real*b.real + a.imaginary*b.imaginary) / denom;
-  ret.imaginary = (a.imaginary*b.real - a.real*b.imaginary) / denom;
-  return ret;
-}
-
-struct complex divide(float a, const struct complex& b)
-{
-  struct complex ret;
-  float denom = (b.real*b.real+b.imaginary*b.imaginary);
-  ret.real = (a*b.real) / denom;
-  ret.imaginary = (-a*b.imaginary) / denom;
-  return ret;
-}
-
-float abs(const struct complex& a)
-{
-  return sqrt(a.real*a.real+a.imaginary*a.imaginary);
-}
-
-struct complex sqrt(const struct complex& a)
-{
-  float z = abs(a);
-  complex c;
-  c.real = sqrt(0.5f*(z+a.real));
-  c.imaginary = sqrt(0.5f*(z-a.real));
-  return c;
-}
-
-inline struct complex polar(float r, float theta) {
-  struct complex ret = {r * cos(theta), r * sin(theta)};
-  return ret;
-}
-
-// length can be less than 10
-inline void laguer(const complex a[11], struct complex& x, int length)
-{
-  const static int MR = 8;
-  const static int MT = 10;
-  const static int MAXIT = MR*MT;
-  const static float EPS = 1.0e-6;
-  const float frac[9] = {0.0, 0.5, 0.25, 0.75, 0.13, 0.38, 0.62, 0.88, 1.0};
-
-  complex dx = {0.f, 0.f};
-  complex x1 = {0.f, 0.f};
-  complex b = {0.f, 0.f};
-  complex d = {0.f, 0.f};
-  complex f = {0.f, 0.f};
-  complex g = {0.f, 0.f};
-  complex h = {0.f, 0.f};
-  complex sq = {0.f, 0.f};
-  complex gp = {0.f, 0.f};
-  complex gm = {0.f, 0.f};
-  complex g2 = {0.f, 0.f};
-  const int m = length-1; // number of coefficients minus 1
-
-  for (int iter = 1; iter < MAXIT+1; iter++) {
-    b = a[m];
-    float err = abs(b);
-    float abx = abs(x);
-    d.real = 0;
-    d.imaginary = 0;
-    f.real = 0;
-    f.imaginary = 0;
-    for(int j=m-1; j > -1; j--) {
-      f = plus(times(x,f), d);
-      d = plus(times(x,d), b);
-      complex a_val = a[j];
-      b = plus(times(x,b), a_val);
-      err = abs(b) + abx*err;
-    }
-    err *= EPS;
-
-    if (abs(b) <= err) return;
-    g = divide(d,b);
-    g2 = times(g,g);
-    h = minus(g2, times(divide(f,b), 2.f));
-    sq = sqrt(times(minus(times(h, (float)m), g2), (float)(m-1)));
-    gp = plus(g, sq);
-    gm = minus(g, sq);
-    float abp = abs(gp);
-    float abm = abs(gm);
-    if (abp < abm) gp=gm;
-    dx = max(abp, abm) > 0.f ? divide(m, gp) : polar(1.f+abx, (float)iter);
-    x1 = minus(x, dx);
-    if (x.real == x1.real && x.imaginary == x1.imaginary) return;
-    if (iter % MT != 0) x = x1;
-    else x = minus(x, times(dx, frac[(int)(iter/MT)]));
-  }
-}
-
-struct ortho_frame {
-  linear2f frame_to_ray_space;
-  vec3f closest_dir;
-  float closest_dist;
-  float ray_dot_offset;
-};
-
-ortho_frame get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ray_dir)
-{
-    /*
-    Produces an orthonormal coordinate frame for the plane that contains the
-    given two points and the ray direction. All inputs are arrays of shape
-    (3, ...).
-    :param glyph_center: The center position of the SH glyph.
-    :param ray_origin: The origin of the ray being traced.
-    :param ray_dir: The normalized ray direction vector.
-    :return: A tuple (frame_to_ray_space, ray_dir, closest_dir, closest_dist).
-        ray_dir is simply passed through. closest_dir is an array of shape
-        (3, ...) providing the normalized direction from glyph_center to the
-        closest point on the ray and closest_dist (shape (...)) provides the
-        corresponding distance. Together the two vectors form an orthonormal
-        frame. frame_to_ray_space is a matrix of shape (2, 2, ...). It converts
-        from a coordinate frame where the x-axis corresponds to ray_dir and the
-        y-axis corresponds to closest_dir to a coordinate frame where the x-axis
-        corresponds to ray_dir and the y-axis corresponds to
-        ray_origin - glyph_center.
-    */
-    struct ortho_frame frame;
-    vec3f offset = ray_origin - glyph_center;
-    frame.ray_dot_offset = dot(ray_dir, offset);
-    frame.closest_dir = offset - frame.ray_dot_offset * ray_dir;
-    frame.closest_dist = length(frame.closest_dir);
-    float inv_closest_dist = 1.0 / frame.closest_dist;
-    frame.closest_dir = frame.closest_dir * inv_closest_dist;
-    frame.frame_to_ray_space.vx = make_vec2f(1.0, 0.0);
-    frame.frame_to_ray_space.vy = make_vec2f(-inv_closest_dist * frame.ray_dot_offset, inv_closest_dist);
-    return frame;
-}
-
-void rootsToRaySpace(complex roots[11], float ray_roots[11], ortho_frame &frame) {
-  for (int i = 0; i < 11; ++i) {
-    vec2f v = make_vec2f(roots[i].real, 1.0);
-    v = frame.frame_to_ray_space * v;
-    ray_roots[i] = v.x / v.y;
-  }
-}
-
-void filterRealRoots(complex roots[11], float ray_roots[11],
-    varying SHIntersections* uniform hitData) {
-
-  for (uniform int i = 0; i < 11; ++i) {
-    if (abs(roots[i].imaginary) < 1.0e-5)
-      hitData->roots[hitData->numIntersections++] = ray_roots[i];
-  }
-}
-
-void evaluate_sh_4(float point[3][5], bool evaluate_gradient, bool evaluate_hessian, float sh[5][15]) {
-    /*
-    Evaluates spherical harmonics basis functions in bands 0, 2 and 4. For the
-    most part, it follows the conventions of "Regularized, fast, and robust
-    analytical Q-ball imaging" by Descouteaux et al. 2007:
-    https://doi.org/10.1002/mrm.21277
-    For normalized vectors, results are the same as with the formulas in this
-    work. The major difference is that the polynomials have been made
-    homogeneous of degree 4, i.e. scaling point by a factor r scales the SH
-    basis functions by a factor of r^4, their gradient by r^3 and their Hessian
-    by r^2.
-    :param point: An array of shape (3, ...) providing the Cartesian coordinates
-        at which the spherical harmonics basis functions should be evaluated.
-    :param evaluate_gradient: Pass True to also evaluate the gradient of the SH
-        basis functions.
-    :param evaluate_hessian: Pass True to also evaluate the Hessian matrix of
-        the SH basis functions. Implies evaluate_gradient.
-    :return: The requested arrays from the set sh, gradient, hessian in this
-        order. sh has shape (15, ...). gradient has shape (3, 15, ...), where
-        the first dimension corresponds to the three dimensions along which the
-        derivative can be taken. hessian has shape (6, 15, ...) where the first
-        dimension corresponds to the entries [0, 0], [0, 1], [0, 2], [1, 1],
-        [1, 2], [2, 2] of the symmetric matrix. The dimension of length 15 lists
-        SH basis functions ordered by band. That means the index tuples
-        (band, order) are as follows:
-        [0] -> (0, 0)
-        [1] -> (2, -2)
-        [2] -> (2, -1)
-        [3] -> (2, 0)
-        [4] -> (2, 1)
-        [5] -> (2, 2)
-        [6] -> (4, -4)
-        [7] -> (4, -3)
-        [8] -> (4, -2)
-        [9] -> (4, -1)
-        [10] -> (4, 0)
-        [11] -> (4, 1)
-        [12] -> (4, 2)
-        [13] -> (4, 3)
-        [14] -> (4, 4)
-    */
-    // This initial part is rather NumPy specific but everything else should be
-    // easy to port to other languages
-    /* int shape = sizeof(point)/sizeof(point[0]) / 3; */
-    #define shape 5 // TODO undo hardcode
-    /* float sh[5 * 15]; */
-    // For homogenization, we express the associated Legendre polynomials as
-    // homogeneous polynomials of the variables z and r = sqrt(x^2 + y^2)
-    /* #define x point[0] */
-    /* float* x = &point[0]; */
-    /* float* y = &point[1]; */
-    /* float* z = &point[2]; */
-
-    float z_2[shape];
-    float r_2[shape];
-    for (int i = 0; i < shape; ++i) {
-      z_2[i] = point[2][i] * point[2][i];
-      r_2[i] = point[0][i] * point[0][i] + point[1][i] * point[1][i];
-    }
-    // Evaluate the relevant associated Legendre polynomials. At such low degree,
-    // the recurrent scheme is not worthwhile. We skip odd bands and constant or
-    // linear polynomials.
-    float legendre_4_0[shape];
-    float scaled_legendre_4_1[shape];
-    float scaled_legendre_4_2[shape];
-    float cosine_2[shape];
-    float sine_2[shape];
-    float cosine_3[shape];
-    float sine_3[shape];
-    float cosine_4[shape];
-    float sine_4[shape];
-    float one_2[shape];
-    for (int i = 0; i < shape; ++i) {
-      legendre_4_0[i] = z_2[i] * (z_2[i] - 3.0*r_2[i]) + 3.0/8.0 * r_2[i] * r_2[i];
-      scaled_legendre_4_1[i] = 2.67618617422915667 * point[2][i] * (-z_2[i] + 0.75 * r_2[i]);
-      scaled_legendre_4_2[i] = 2.83852408727268005 * (z_2[i] - (1.0 / 6.0) * r_2[i]);
-      // Evaluate the Fourier basis. Again, we omit constant and linear terms.
-      cosine_2[i] = r_2[i] - 2.0 * point[1][i] * point[1][i];
-      sine_2[i] = 2.0 * point[0][i] * point[1][i];
-      cosine_3[i] = point[0][i] * cosine_2[i] - point[1][i] * sine_2[i];
-      sine_3[i] = point[0][i] * sine_2[i] + point[1][i] * cosine_2[i];
-      cosine_4[i] = point[0][i] * cosine_3[i] - point[1][i] * sine_3[i];
-      sine_4[i] = point[0][i] * sine_3[i] + point[1][i] * cosine_3[i];
-      // Assemble the Legendre polynomials and the Fourier basis with appropriate
-      // constant factors and homogenize to degree 4 by multiplying one_2 as needed
-      one_2[i] = r_2[i] + z_2[i];
-      sh[i][0] = 0.282094791773878143 * one_2[i] * one_2[i];
-      sh[i][1] = 0.546274215296039535 * one_2[i] * cosine_2[i];
-      sh[i][2] = 1.09254843059207907  * one_2[i] * point[0][i] * point[2][i];
-      sh[i][3] = 0.630783130505040012 * one_2[i] * (z_2[i] - 0.5 * r_2[i]);
-      sh[i][4] = -1.09254843059207907 * one_2[i] * point[1][i] * point[2][i];
-      sh[i][5] = 0.546274215296039535 * one_2[i] * sine_2[i];
-      sh[i][6] = 0.625835735449176135 * cosine_4[i];
-      sh[i][7] = 1.77013076977993053  * cosine_3[i] * point[2][i];
-      sh[i][8] = cosine_2[i] * scaled_legendre_4_2[i];
-      sh[i][9] = -point[0][i] * scaled_legendre_4_1[i];
-      sh[i][10] = 0.846284375321634430 * legendre_4_0[i];
-      sh[i][11] = point[1][i] * scaled_legendre_4_1[i];
-      sh[i][12] = sine_2[i] * scaled_legendre_4_2[i];
-      sh[i][13] = -1.77013076977993053 * sine_3[i] * point[2][i];
-      sh[i][14] = 0.625835735449176135 * sine_4[i];
-    }
-    /* if (!evaluate_gradient && !evaluate_hessian) */
-      /* return sh; */
-}
-
-void evaluate_sh_4(float point[3][5],  float sh[5][15]) { evaluate_sh_4(point, false, false, sh); }
-
-void get_planar_sh_polynomial_4(const uniform float* sh_coeffs, vec3f x_axis, vec3f y_axis, float sh_poly[5]) {
-    /*
-    Constructs a homogeneous quartic polynomial in the monic basis describing
-    the behavior of a linear combination of SH basis functions in bands 0, 2, 4
-    in a plane spanned by two given vectors.
-    :param sh_coeffs: Spherical harmonics coefficients for bands 0, 2 and 4. See
-        evaluate_sh_4() for their order. Array of shape (15, ...).
-    :param x_axis: The x-axis of the coordinate frame. Array of shape (3, ...).
-    :param y_axis: The y-axis of the coordinate frame. Array of shape (3, ...).
-    :return: Polynomial coefficients for y^4, y^3*x, y^2*x^2, y*x^3, x^4 in this
-        order. Array of shape (5, ...).
-    */
-    // Evaluate at fixed pairs of x and y. These points are rather arbitrary. The
-    // main goals in choosing them are that the computation of polynomial
-    // coefficients is fast and numerically stable. See invert_vandermonde().
-    const uniform float xs[] = {-pow(0.5,0.25), pow(0.5,0.25), 2.0, 0.0, 1.0};
-    const uniform float ys[] = { pow(0.5,0.25), pow(0.5,0.25), 1.0, 1.0, 0.0};
-    float points[3][5];
-    for (uniform int i = 0; i < 3; ++i)
-      for (uniform int j = 0; j < 5; ++j)
-        points[i][j] = xs[j] * get(x_axis, i) + ys[j] * get(y_axis, i);
-
-    float shs[5][15];
-    evaluate_sh_4(points, shs);
-    float poly_values[5] = {0};
-    for (uniform int i = 0; i < 5; ++i) {
-      sh_poly[i] = 0;
-    /* print("shs %d\n", shs[i][0]); */
-      for (uniform int j = 0; j < 15; ++j)
-        poly_values[i] += shs[i][j] * sh_coeffs[j];
-    }
-
-    // Construct the polynomial coefficients
-    sh_poly[0] = poly_values[3];
-    sh_poly[4] = poly_values[4];
-    const uniform float inv_vander[3][5] = {{-2.0 / 3.0, 2.0, -1.0 / 6.0, -0.5, 2.0},
-                                            {1.0, 1.0, 0.0, -1.0, -1.0},
-                                            {-1.0 / 3.0, -1.0, 1.0 / 6.0, 0.5, -2.0}};
-    for (uniform int i = 1; i < 4; ++i)
-      for (uniform int j = 0; j < 5; ++j)
-        sh_poly[i] += inv_vander[i-1][j] * poly_values[j];
-}
-
-void zroots(float a[11], complex roots[11], bool polish, vec3f& debug_col) {
-    float EPS = 1.0e-14;
-    const uniform int m = 10;
-    complex x = {0,0};
-    complex b = {0,0};
-    complex c = {0,0};
-    // default root values need to avoid stopping criteria(imag == 0 in our case)
-    for (uniform int i = 0; i < 11; ++i) {
-      roots[i].real = 1e16;
-      roots[i].imaginary = 1e16;
-    }
-    complex a_complex[11];
-    complex ad[11];
-    for (uniform int i = 0; i < 11; ++i) {
-      ad[i].real = a[i];
-      ad[i].imaginary = 0;
-      a_complex[i].real = a[i];
-      a_complex[i].imaginary = 0;
-    }
-    for (uniform int j = m-1; j > -1; --j) { // loop over each root to be found
-      x.real = 0.0;
-      x.imaginary = 0.0; // start at zero to favor convergence to smallest remaining root
-      laguer(ad, x, j+2);
-      if (abs(x.imaginary) <= 2.0*EPS*abs(x.real))
-        x.imaginary = 0.0;
-      roots[j] = x;
-      b = ad[j+1]; // forward deflation
-      for (int jj = j; jj > -1; --jj) {
-        c = ad[jj];
-        ad[jj] = b;
-        b = plus(times(x,b),c);
-      }
-    }
-
-    // polish roots using undeflated coefficients
-    if (polish)
-        for (uniform int j = 0; j < 11; ++j)
-            laguer(a_complex, roots[j], 11);
-
-    // sort roots by real parts by straight insertion
-    for (uniform int i = 1; i < m; ++i) {
-      complex temp = roots[i];
-      int j = i;
-      while (j > 0 && roots[j-1].real > temp.real) {
-        roots[j] = roots[j-1];
-        j -= 1;
-      }
-      roots[j] = temp;
-    }
-    debug_col.x = roots[0].real;
-    /* debug_col.y = roots[1].real; */
-    /* debug_col.z = roots[2].real; */
-}
-
-float* get_poly(const uniform float* sh_coeffs, vec3f ray_dir, struct ortho_frame frame, float poly[11], vec3f& debug_col) {
-    float sh_poly[5];
-    get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
-    // Square this polynomial
-    float sh_square[9] = {0};
-    for (int i = 0; i < 9; ++i)
-      for (int j = max(0, i-4); j < min(4,i)+1; ++j)
-        sh_square[i] += sh_poly[j] * sh_poly[i - j];
-    // Increase the degree of the polynomial from 8 to 10 assuming y=closest_dist
-    float inv_dist_sq = 1.0 / (frame.closest_dist * frame.closest_dist);
-    for (uniform int i = 0; i < 9; ++i)
-      poly[i] = inv_dist_sq * sh_square[i];
-    poly[9] = poly[10] = 0;
-    // Subtract (x^2+y^2)^5 (which can be computed using the binomial theorem)
-    poly[0] -= 1.0;
-    poly[2] -= 5.0;
-    poly[4] -= 10.0;
-    poly[6] -= 10.0;
-    poly[8] -= 5.0;
-    poly[10] -= 1.0;
-}
-
-/* void get_sh_glyph_intersections(float** sh_coeffs, vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) */
-/* { */
-/*     /\* */
-/*     Computes all intersections between a ray and a glyph defined by a linear */
-/*     combination of spherical harmonics basis functions. */
-/*     :param sh_coeffs: Spherical harmonics coefficients for bands 0, 2 and 4. See */
-/*         evaluate_sh_4() for their order. Shape 15. */
-/*     :param glyph_center: The center position of the SH glyph. Shape 3. */
-/*     :param ray_origin: The origin of the ray being traced. Shape 3. */
-/*     :param ray_dir: The normalized ray direction vector. Shape 3. */
-/*     :return: An array of shape 10 providing ray parameters at which */
-/*         intersections exist. Some of them may be complex or negative. */
-/*     *\/ */
-/*     // Get a polynomial for the SH polynomial in the relevant plane */
-/*     struct ortho_frame* frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir); */
-/*     float* poly = get_poly(sh_coeffs, ray_dir, frame); */
-
-/*     // Numpy does not have a handy function to compute roots for many polynomials */
-/*     // in an array at once, hence I lost my motivation to vectorize things */
-/*     float roots[11];
-/*     zroots(poly, roots, true); */
-/*     // Transform back to ray coordinates. We could have worked in global */
-/*     // coordinates directly but this approach ought to be more stable. */
-/*     float* ray_roots[length(roots)]; */
-/*     for (int i = 0; i < length(roots); ++i) */
-/*       ray_roots = frame->frame_to_ray_space * np.vstack([roots, np.ones_like(roots)]); */
-/*     // Dehomogenize */
-/*     return ray_roots[0] / ray_roots[1]; */
-/* } */
-
-float eval_poly(float poly[11], float t) {
-  float y = 0.f;
-  uniform int degree = 10; // TODO undo hardcode
-  float t_pow = t;
-  y += poly[0];
-  for (uniform int i = 1; i < degree+1; ++i) {
-    y += poly[i] * t_pow;
-    t_pow *= t;
-  }
-  //y += poly[degree];
-  return y;
-}
-
-uniform float CylinderRhoMax(uniform int l, uniform int m)
-{
-	// Output value
-	uniform float result = 0.0;
-
-	// Hard-coded results for all combinations of "l" and "m"
-	     if ((l == 0) && (m ==  0))		result = 0.282095;
-	else if ((l == 2) && (m == -2))		result = 0.386274;
-	else if ((l == 2) && (m == -1))		result = 0.297354;
-	else if ((l == 2) && (m ==  0))		result = 0.315392;
-	else if ((l == 2) && (m ==  1))		result = 0.297354;
-	else if ((l == 2) && (m ==  2))		result = 0.386274;
-	else if ((l == 4) && (m == -4))		result = 0.442533;
-	else if ((l == 4) && (m == -3))		result = 0.358249;
-	else if ((l == 4) && (m == -2))		result = 0.334523;
-	else if ((l == 4) && (m == -1))		result = 0.311653;
-	else if ((l == 4) && (m ==  0))		result = 0.317357;
-	else if ((l == 4) && (m ==  1))		result = 0.311653;
-	else if ((l == 4) && (m ==  2))		result = 0.334523;
-	else if ((l == 4) && (m ==  3))		result = 0.358249;
-	else if ((l == 4) && (m ==  4))		result = 0.442533;
-
+// Produces an orthonormal coordinate frame for the plane that contains the
+// given two points and the ray direction.
+// \param glyph_center The center position of the SH glyph.
+// \param ray_origin The origin of the ray being traced.
+// \param ray_dir The normalized ray direction vector.
+orthogonal_frame_t get_orthonormal_frame(vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) {
+	orthogonal_frame_t result;
+	vec3f offset = ray_origin - glyph_center;
+	result.ray_dot_offset = dot(ray_dir, offset);
+	result.closest_dir = offset - result.ray_dot_offset * ray_dir;
+	result.closest_dist_sq = dot(result.closest_dir, result.closest_dir);
+	result.closest_dir = result.closest_dir / sqrt(result.closest_dist_sq);
+	result.ray_dir = ray_dir;
 	return result;
 }
 
-uniform float CylinderZMax(uniform int l, uniform int m)
-{
-	// Output value
-	uniform float result = 0.0;
 
-	// Hard-coded results for all combinations of "l" and "m"
-	     if ((l == 0) && (m ==  0))		result = 0.282095;
-	else if ((l == 2) && (m == -2))		result = 0.148677;
-	else if ((l == 2) && (m == -1))		result = 0.297354;
-	else if ((l == 2) && (m ==  0))		result = 0.630783;
-	else if ((l == 2) && (m ==  1))		result = 0.297354;
-	else if ((l == 2) && (m ==  2))		result = 0.148677;
-	else if ((l == 4) && (m == -4))		result = 0.126660;
-	else if ((l == 4) && (m == -3))		result = 0.232690;
-	else if ((l == 4) && (m == -2))		result = 0.335275;
-	else if ((l == 4) && (m == -1))		result = 0.459798;
-	else if ((l == 4) && (m ==  0))		result = 0.846284;
-	else if ((l == 4) && (m ==  1))		result = 0.459798;
-	else if ((l == 4) && (m ==  2))		result = 0.335275;
-	else if ((l == 4) && (m ==  3))		result = 0.232690;
-	else if ((l == 4) && (m ==  4))		result = 0.126660;
-
-	return result;
-}
-
-uniform float CylinderRMax(float uniform* uniform coefficients)
-{
-	// Output radius
-	uniform float sumL = 0.0;
-
-	// Sum for one order
-	uniform float sumM = 0.0;
-
-	// Coefficient index
-	uniform int j = 0;
-
-	// Loop through the orders
-	for (uniform int l = 0; l <= 4; l += 2) {
-		// Reset the sum for this order
-		sumM = 0.0;
-
-		// Process (2*L+1) coefficients
-		for (uniform int m = -l; m <= l; m++) {
-			sumM += abs(coefficients[j]) * CylinderRhoMax(l, m);
-			j++;
-		}
-		sumL += sumM;
+// Constructs a homogeneous quartic polynomial describing the behavior of a
+// linear combination of SH basis functions in bands 0, 2, 4 in a plane spanned
+// by two given vectors.
+// \param out_poly Polynomial coefficients for y^4, y^3*x, y^2*x^2, y*x^3 and
+//		x^4 in this order.
+// \param sh_coeffs Spherical harmonics coefficients for bands 0, 2 and 4. See
+//		evaluate_sh_4() for their order.
+// \param x_axis The x-axis of the coordinate frame.
+// \param y_axis The y-axis of the coordinate frame.
+void get_planar_sh_polynomial_4(float out_poly[5], const uniform float * uniform sh_coeffs, vec3f x_axis, vec3f y_axis) {
+	// Evaluate at equidistant pairs of x and y on the unit circle. This choice
+	// is rather arbitrary but is reasonable in terms of numerical accuracy and
+	// gives correct results even without a homogenized SH basis.
+	float poly_values[5];
+	// [[unroll]]
+	for (uniform int i = 0; i != 5; ++i) {
+		float x = cos(i * 3.141592653589793f * 0.2f);
+		float y = sin(i * 3.141592653589793f * 0.2f);
+		vec3f point = x * x_axis + y * y_axis;
+		float shs[15];
+		evaluate_sh_4(shs, point);
+		poly_values[i] = 0.0f;
+		for (uniform int j = 0; j != 15; ++j)
+			poly_values[i] += sh_coeffs[j] * shs[j];
 	}
-	return sumL;
-}
-
-uniform float CylinderZMax(float uniform* uniform coefficients)
-{
-	assert(coefficients != NULL);
-
-	// Output radius
-	uniform float sumL = 0.0;
-
-	// Sum for one order
-	uniform float sumM = 0.0;
-
-	// Coefficient index
-	uniform int j = 0;
-
-	// Loop through the orders
-	for (uniform int l = 0; l <= 4; l += 2) {
-		// Reset the sum for this order
-		sumM = 0.0;
-
-		// Process (2*L+1) coefficients
-		for (uniform int m = -l; m <= l; m++) {
-			sumM += abs(coefficients[j]) * CylinderZMax(l, m);
-			j++;
-		}
-		sumL += sumM;
+	// Construct the polynomial coefficients
+	float inv_vander[5][5] = {
+		{  0.2f, -0.247213595f,  0.647213595f,  0.647213595f, -0.247213595f },
+		{  0.0f, -0.179611191f,  1.99191863f,  -1.99191863f,   0.179611191f },
+		{ -2.0f,  2.34164079f,  -0.341640786f, -0.341640786f,  2.34164079f  },
+		{  0.0f,  1.70130162f,  -1.05146222f,   1.05146222f,  -1.70130162f  },
+		{  1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
+	};
+	// [[unroll]]
+	for (uniform int i = 0; i != 5; ++i) {
+		out_poly[i] = 0.0f;
+		// [[unroll]]
+		for (uniform int j = 0; j != 5; ++j)
+			out_poly[i] += inv_vander[i][j] * poly_values[j];
 	}
-	return sumL;
-}
-
-float C0even(float* coeffs, float phi) {
-  return (coeffs[0] + sqrt(5.0)*coeffs[3] + 3.0*coeffs[10])/(2.0*sqrt(PI));
-}
-
-float C1even(float* coeffs, float phi) {
-  return (sqrt(5.0/PI)*((sqrt(3.0)*coeffs[2] + 3.0*sqrt(2.0)*coeffs[9])*cos(phi) - (sqrt(3.0)*coeffs[4] + 3.0*sqrt(2.0)*coeffs[11])*sin(phi)))/2.0;
-}
-
-float C2even(float* coeffs, float phi) {
-  return (4.0*coeffs[0] + sqrt(5.0)*coeffs[3] - 18.0*coeffs[10] + sqrt(5.0)*(sqrt(3.0)*coeffs[1] + 9.0*coeffs[8])*cos(2.0*phi) + sqrt(5.0)*(sqrt(3.0)*coeffs[5] + 9.0*coeffs[12])*sin(2.0*phi))/(4.0*sqrt(PI));
-}
-
-float C3even(float* coeffs, float phi) {
-  return (sqrt(5.0/PI)*((4.0*sqrt(3.0)*coeffs[2] - 9.0*sqrt(2.0)*coeffs[9])*cos(phi) + 3.0*sqrt(14.0)*coeffs[7]*cos(3.0*phi) - 4.0*sqrt(3.0)*coeffs[4]*sin(phi) + 9.0*sqrt(2.0)*coeffs[11]*sin(phi) - 3.0*sqrt(14.0)*coeffs[13]*sin(3.0*phi)))/8.0;
-}
-
-float C4even(float* coeffs, float phi) {
-  return (8.0*coeffs[0] - 4.0*sqrt(5.0)*coeffs[3] + 9.0*coeffs[10] + 2.0*sqrt(5.0)*(2.0*sqrt(3.0)*coeffs[1] - 3.0*coeffs[8])*cos(2.0*phi) + 3.0*sqrt(35.0)*coeffs[6]*cos(4.0*phi) + 2.0*sqrt(5.0)*(2.0*sqrt(3.0)*coeffs[5] - 3.0*coeffs[12])*sin(2.0*phi) + 3.0*sqrt(35.0)*coeffs[14]*sin(4.0*phi))/(16.0*sqrt(PI));
-}
-
-float Ceven(float* coeffs, int lmax, float phi)
-{
-  float result = 0.0;
-  if (lmax == 0) result = C0even(coeffs, phi);
-  else if (lmax == 1) result = C1even(coeffs, phi);
-  else if (lmax == 2) result = C2even(coeffs, phi);
-  else if (lmax == 3) result = C3even(coeffs, phi);
-  else if (lmax == 4) result = C4even(coeffs, phi);
-  return result;
-}
-
-float chPolyVal(float Ce[5], float rho, float z)
-{
-    float sumit = 0.0;
-    float zp = abs(z);
-    float s;
-    for (uniform int n=0; n <=4; n++)
-      {
-      // XXX: There is a problem for z < 0. The code below fixes this but its not ideal.
-      //  It would be better to fix the IsInsideCylindricalHarmonic for negative z.
-      if ((z < 0.0) && ((n==1)||(n==3))) s = -1.0;
-      else s = 1.0;
-      sumit += Ce[n]*pow(rho, (float)n)*pow(zp, (float)(4-n))*s;
-      } // for n
-    //if (sumit > pow(sqrt(rho*rho+zp*zp), 5.0)) isInside = true;
-    //else isInside = false;
-    return sumit - pow(sqrt(rho*rho+zp*zp), 5.0);
 }
 
 
-linear3f rotation_matrix_from_vectors(vec3f vec1, vec3f vec2) {
-    /* Find the rotation matrix that aligns vec1 to vec2
-    :param vec1: A 3d "source" vector
-    :param vec2: A 3d "destination" vector
-    :return mat: A transform matrix (3x3) which when applied to vec1, aligns it with vec2.
-    */
-    vec3f a = normalize(vec1);
-    vec3f b = normalize(vec2);
-    vec3f v = cross(a, b);
-    float c = dot(a, b);
-    float s = length(v);
-    linear3f kmat = make_LinearSpace3f(make_vec3f(0, v.z, -v.y), make_vec3f(-v.z, 0, v.x), make_vec3f(v.y, -v.x, 0));
-    linear3f kmat_dot = kmat * kmat;
-    linear3f rotation_matrix = make_LinearSpace3f_varying_identity() + kmat + kmat_dot * ((1.0-c)/(s*s));
-    return rotation_matrix;
+// Compares the two entries of the given array with the given indices and
+// swaps them in place if lhs is greater than rhs
+void cmp(float a[10], uint lhs, uint rhs) {
+	float a_lhs = a[lhs];
+	a[lhs] = min(a[rhs], a_lhs);
+	a[rhs] = max(a[rhs], a_lhs);
 }
 
 
-void get_viewpoint_rotation(const vec3f& rayOrg, const uniform vec3f& center, const vec3f& up,
-                            vec3f& eX, vec3f& eY, vec3f& eZ) {
-    eZ = normalize(rayOrg-center);
-    eX = normalize(cross(up, eZ));
-    eY = cross(eZ, eX);
+// Uses a sorting network to sort a list of floats in increasing order
+void sort_10(float a[10]) {
+	// This sorting network is taken from:
+	// Donald E. Knuth, 1998, The Art of Computer Programming, Volume 3 -
+	// Sorting and Searching, 2nd Edition
+	cmp(a, 4, 9);  cmp(a, 3, 8);  cmp(a, 2, 7);  cmp(a, 1, 6);  cmp(a, 0, 5);  cmp(a, 1, 4);  cmp(a, 6, 9);  cmp(a, 0, 3);  cmp(a, 5, 8);  cmp(a, 0, 2);  cmp(a, 3, 6);  cmp(a, 7, 9);  cmp(a, 0, 1);  cmp(a, 2, 4);  cmp(a, 5, 7);  cmp(a, 8, 9);  cmp(a, 4, 6);  cmp(a, 1, 2);  cmp(a, 7, 8);  cmp(a, 3, 5);  cmp(a, 2, 5);  cmp(a, 6, 8);  cmp(a, 1, 3);  cmp(a, 4, 7);  cmp(a, 2, 3);  cmp(a, 6, 7);  cmp(a, 3, 4);  cmp(a, 5, 6);  cmp(a, 4, 5);
 }
 
 
-float computeRayAzimuth(const vec3f& eX, const vec3f& eY, const vec3f& rayDir) {
-  return atan2(dot(eY, rayDir), dot(eX, rayDir));
+// Computes all intersections between a line segment and a glyph defined by a
+// linear combination of spherical harmonics basis functions.
+// \param sh_coeffs Spherical harmonics coefficients for bands 0, 2 and 4. See
+// 	evaluate_sh_4() for their order.
+// \param glyph_center The center position of the SH glyph.
+// \param ray_origin The origin of the ray being traced.
+// \param ray_dir The normalized ray direction vector.
+// \param t_min The beginning of the interval of ray parameters in which
+//		intersections should be searched.
+// \param t_max The end of the interval of ray parameters.
+// \return Up to 10 ray parameters at which intersections exist. They may be
+//		negative. Sorted in ascending order. Ends with NO_INTERSECTION entries.
+void get_sh_glyph_intersections_segment(float out_ray_roots[10], const uniform float * uniform sh_coeffs, const uniform vec3f& glyph_center, const vec3f& ray_origin, const vec3f& ray_dir, float t_min, float t_max) {
+	// Get a polynomial for the SH polynomial in the relevant plane
+	orthogonal_frame_t frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
+	float sh_poly[5];
+	get_planar_sh_polynomial_4(sh_poly, sh_coeffs, frame.ray_dir, frame.closest_dir);
+	// Compute an upper bound for the absolute value of this polynomial on the
+	// unit circle
+	float sh_poly_bound = abs(sh_poly[0]) + abs(sh_poly[4]) + 0.325f * (abs(sh_poly[1]) + abs(sh_poly[3])) + 0.25f * abs(sh_poly[2]);
+	// Square this polynomial and multiply by y^2 (i.e. append two zeros)
+	float poly[11] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	// [[unroll]]
+	for (uniform int i = 0; i != 5; ++i)
+		// [[unroll]]
+		for (uniform int j = 0; j != 5; ++j)
+			poly[i + j] += sh_poly[i] * sh_poly[j];
+	// Subtract closest_dist_sq * (x^2+y^2)^5 (which can be computed using the
+	// binomial theorem)
+	poly[0] -= frame.closest_dist_sq;
+	poly[2] -= 5.0f * frame.closest_dist_sq;
+	poly[4] -= 10.0f * frame.closest_dist_sq;
+	poly[6] -= 10.0f * frame.closest_dist_sq;
+	poly[8] -= 5.0f * frame.closest_dist_sq;
+	poly[10] -= frame.closest_dist_sq;
+	// Compute bounds on where roots might be located
+	float root_bound_sq = sh_poly_bound * (sh_poly_bound / frame.closest_dist_sq) - 1.0f;
+	if (root_bound_sq < 0.0f) {
+		// There are no intersections
+		// [[unroll]]
+		for (uniform int i = 0; i != 10; ++i)
+			out_ray_roots[i] = NO_INTERSECTION;
+		return;
+	}
+	float root_bound = sqrt(root_bound_sq);
+	// Combine them with the given bounds
+	float inv_closest_dist = 1.0 / sqrt(frame.closest_dist_sq);
+	float x_min = (t_min + frame.ray_dot_offset) * inv_closest_dist;
+	float x_max = (t_max + frame.ray_dot_offset) * inv_closest_dist;
+	x_min = max(x_min, -root_bound);
+	x_max = min(x_max, +root_bound);
+	// Compute the roots in the local coordinate frame
+	float roots[10];
+	find_real_roots(roots, poly, x_min, x_max, 1.0e-3f * root_bound);
+	// Transform back to ray coordinates. We could have worked in global
+	// coordinates directly but this approach ought to be more stable.
+	float closest_dist = 1.0f / inv_closest_dist;
+	// [[unroll]]
+	for (uniform int i = 0; i != 10; ++i)
+		out_ray_roots[i] = isnan(roots[i]) ? NO_INTERSECTION : (roots[i] * closest_dist - frame.ray_dot_offset);
+	// Sort the roots
+	sort_10(out_ray_roots);
 }
 
-void computeQuarticPoly(float* coeffs, float quartic_poly[5], float ray_azimuth) {
-  quartic_poly[0] = 0.5 / sqrt(PI) * (coeffs[0] + sqrt(5.0) * coeffs[3] + 3.0 * coeffs[10]);
-  quartic_poly[1] = sqrt(1.25 / PI) * ((sqrt(3.0) * coeffs[2] + 3.0 * sqrt(2.0) * coeffs[9]) * cos(ray_azimuth)
-                                 - (sqrt(3.0) * coeffs[4] + 3.0 * sqrt(2.0) * coeffs[11]) * sin(ray_azimuth));
-  quartic_poly[2] = 0.25 / sqrt(PI) * (sqrt(5.0) * (sqrt(3.0) * coeffs[5] + 9.0 * coeffs[12]) * sin(2.0 * ray_azimuth)
-                                 + sqrt(5.0) * (sqrt(3.0) * coeffs[1] + 9.0 * coeffs[8]) * cos(2.0 * ray_azimuth)
-                                 + 4.0 * coeffs[0] + sqrt(5.0) * coeffs[3] - 18.0 * coeffs[10]);
-  quartic_poly[3] = 0.125 * sqrt(5.0 / PI) * ((9.0 * sqrt(2.0) * coeffs[11] - 4.0 * sqrt(3.0) * coeffs[4]) * sin(ray_azimuth)
-                                        + 3.0 * sqrt(14.0) * (coeffs[7] * cos(3.0 * ray_azimuth) - coeffs[13] * sin(3.0 * ray_azimuth))
-                                        + (4.0 * sqrt(3.0) * coeffs[2] - 9.0 * sqrt(2.0) * coeffs[9]) * cos(ray_azimuth));
-  quartic_poly[4] = 1.0 / (16.0 * sqrt(PI)) * (3.0 * sqrt(35.0) * (coeffs[14] * sin(4.0 * ray_azimuth) + coeffs[6] * cos(4.0 * ray_azimuth))
-                                         + 2.0 * sqrt(5.0) * (2.0 * sqrt(3.0) * coeffs[5] - 3.0 * coeffs[12]) * sin(2.0 * ray_azimuth)
-                                         + 2.0 * sqrt(5.0) * (2.0 * sqrt(3.0) * coeffs[1] - 3.0 * coeffs[8]) * cos(2.0 * ray_azimuth)
-                                         + 8.0 * coeffs[0] - 4.0 * sqrt(5.0) * coeffs[3] + 9.0 * coeffs[10]);
-};
 
-float getAlmsickIntersection(float poly[5], const vec3f& eX, const vec3f& eY, const vec3f& eZ,
-                      const vec3f& rayOrg, const vec3f& rayDir, const uniform vec3f& center, const vec2f& bounds, int step_count=200) {
-  float ray_origin_z = dot(eZ, (rayOrg - center));
-  float start = bounds.x;
-  float end = -bounds.y;
-  float dir_x = dot(eX, rayDir);
-  float dir_y = dot(eY, rayDir);
-  float dir_z = dot(eZ, rayDir);
-  float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dir_z;
-  float radius_summand = -ray_origin_z * radius_factor;
-
-  float step = (end - start) / (step_count - 1);
-  float z = start;
-  float prev_sdf = 0.0;
-  float t = -1;
-  for (int i = 0; i < step_count; ++i) {
-    float radius = radius_factor * z + radius_summand;
-    float poly_value = 0.0;
-    float q = radius / z;
-    poly_value = (((poly[4]*q+poly[3])*q+poly[2])*q+poly[1])*q+poly[0];
-    float norm = sqrt(radius * radius + z * z);
-    float normed_radius = radius / norm;
-    float normed_z = z / norm;
-    float normed_z2 = normed_z*normed_z;
-    poly_value *= normed_z2*normed_z2;
-    float sdf = abs(poly_value) - norm;
-    if (prev_sdf * sdf < 0.0) {
-      float intersect_z = z + sdf * step / (prev_sdf - sdf);
-      float z_diff = (intersect_z - ray_origin_z);
-      t = sqrt(z_diff*z_diff + radius*radius);
-      break;
-    }
-    z += step;
-    prev_sdf = sdf;
-  }
-  return t;
+// Like get_sh_glyph_intersections_segment() but computes all intersections
+// along the infinite line for the given ray.
+void get_sh_glyph_intersections(float out_ray_roots[10], const uniform float * uniform sh_coeffs, const uniform vec3f& glyph_center, const vec3f& ray_origin, const vec3f& ray_dir) {
+	get_sh_glyph_intersections_segment(out_ray_roots, sh_coeffs, glyph_center, ray_origin, ray_dir, -1.0e38f, 1.0e38f);
 }
 
-vec2f intersectCylinderCaps(const vec3f& rayOrg, const vec3f& rayDir, uniform float radius, uniform float height) {
-  const uniform vec3f v0 = make_vec3f(0,0,-height);
-  const uniform vec3f v1 = make_vec3f(0,0,height);
-  Intersections isectCyl = intersectCylinder(rayOrg, rayDir, v0, v1, radius);
-  uniform vec4f plane0 = make_vec4f(0,0,1,height);
-  uniform vec4f plane1 = make_vec4f(0,0,1,-height);
-  Hit plane0Hit = intersectPlane(rayOrg, rayDir, plane0);
-  Hit plane1Hit = intersectPlane(rayOrg, rayDir, plane1);
-  vec3f p0 = rayOrg+rayDir*isectCyl.entry.t;
-  vec3f p1 = rayOrg+rayDir*isectCyl.exit.t;
-  vec3f planeP0 = rayOrg+rayDir*plane0Hit.t;
-  vec3f planeP1 = rayOrg+rayDir*plane1Hit.t;
-  planeP0.z = 0;
-  planeP1.z = 0;
-  float planeP0R = length(planeP0);
-  float planeP1R = length(planeP1);
-  plane0Hit.hit = plane0Hit.hit && planeP0R < radius;
-  plane1Hit.hit = plane1Hit.hit && planeP1R < radius;
-  // Cylinder not hit
-  if (!isectCyl.entry.hit && !isectCyl.exit.hit) {
-    bool p0Closer = plane0Hit.t < plane1Hit.t;
-    isectCyl.entry = p0Closer ? plane0Hit : plane1Hit;
-    isectCyl.exit = p0Closer ? plane1Hit : plane0Hit;
-  }
-  // Only one hit on cylinder
-  if (!isectCyl.entry.hit) {
-    if (plane0Hit.hit) isectCyl.entry = plane0Hit;
-    else if (plane1Hit.hit) isectCyl.entry = plane1Hit;
-  }
-  if (!isectCyl.exit.hit) {
-    if (plane0Hit.hit) isectCyl.exit = plane0Hit;
-    else if (plane1Hit.hit) isectCyl.exit = plane1Hit;
-  }
-  isectCyl.entry.u = isectCyl.entry.t < isectCyl.exit.t;
 
-  vec3f cylP0 = rayOrg + rayDir*isectCyl.entry.t;
-  vec3f cylP1 = rayOrg + rayDir*isectCyl.exit.t;
-  vec2f cylBounds = make_vec2f(length(cylP0), length(cylP1));
-
-  return cylBounds;
+// Computes a unit normal vector for a spherical harmonics glyph.
+// \param sh_coeffs Spherical harmonics coefficients for bands 0, 2 and 4. See
+//		evaluate_sh_4() for their order.
+// \param offset The position on the glyph at which the normal should be
+//		evaluated, relative to the glyph center.
+// \return The normalized normal vector.
+vec3f get_sh_glyph_normal(const uniform float * uniform sh_coeffs, vec3f offset) {
+	float shs[15];
+	vec3f grads[15];
+	evaluate_sh_4_grad(shs, grads, offset);
+	float poly_value = 0.0f;
+	vec3f poly_grad = make_vec3f(0.0f);
+	// [[unroll]]
+	for (uniform int i = 0; i != 15; ++i) {
+		poly_value += sh_coeffs[i] * shs[i];
+		poly_grad = poly_grad + sh_coeffs[i] * grads[i];
+	}
+	float length_2 = dot(offset, offset);
+	vec3f normal = 5.0f * offset - (length_2 / poly_value) * poly_grad;
+	return normalize(normal);
 }
 
-inline Intersections intersectSphericalHarmonics(const vec3f& rayOrg,
+inline void intersectSphericalHarmonicsNewtonBisection(float out_ray_roots[10],
+	const vec3f& rayOrg,
     const vec3f& rayDir,
     const uniform vec3f& center,
     const uniform float* uniform coeffs,
-    const uniform float* uniform rotatedCoeffs,
-    const uniform int degreeL,
-    const uniform float boundRadius,
-    varying SHIntersections* uniform hitData,
-    const uniform PerspectiveCamera* camera)
+    varying SHIntersections* uniform hitData)
 {
-  Intersections isect;
-  isect.entry.hit = false;
-  isect.exit.hit = false;
-  isect.entry.t = inf;
-  isect.exit.t = -inf;
-  bool hitDataPresent = hitData != NULL;
-  if (hitDataPresent && hitData->numIntersections != 0) return isect;
-
-  vec3f cRayOrg = rayOrg - center;
-
-  // bounding sphere as starting point
-  Intersections isectSphere = intersectSphere(rayOrg, rayDir, center, boundRadius);
-  if (!isectSphere.entry.hit) return isect;
-
-  vec3f p;
-
-  #if 0
-  float dist;
-  if (hitDataPresent)
-    hitData->numIntersections = 0;
-  vec3f debug_col = make_vec3f(0);
-  float io;
-  struct ortho_frame frame = get_orthonormal_frame(center, rayOrg, rayDir);
-  float poly[11];
-  get_poly(coeffs, rayDir, frame, poly, debug_col);
-  complex roots[11];
-  zroots(poly, roots, false, debug_col);
-  float ray_roots[11];
-  rootsToRaySpace(roots, ray_roots, frame);
-  if (hitDataPresent) {
-    filterRealRoots(roots, ray_roots, hitData);
-    for (int i = 0; i < hitData->numIntersections; ++i)
-      hitData->normals[i] = get_sh_glyph_normal(coeffs, cRayOrg + hitData->roots[i] * rayDir);
-  }
-  else {
-    for (uniform int i = 0; i < 11; ++i)
-      if (abs(roots[i].imaginary) < 1.0e-5) {
-        dist = ray_roots[i];
-        isect.entry.hit = true;
-        break;
-      }
-  }
-
-  if(isect.entry.hit) {
-    isect.entry.u = ray_roots[0];
-    isect.entry.t = dist;
-    p = cRayOrg + dist * rayDir;
-    isect.entry.N = get_sh_glyph_normal(coeffs, p);
-  }
-  return isect;
-
-
-  #elif 1 // Almsick's inverse rotation method
-  vec3f normRayDir = normalize(rayDir);
-  vec3f eX, eY, eZ;
-  vec3f viewUp = normalize(camera->dv_up);
-  get_viewpoint_rotation(rayOrg, center, viewUp, eX, eY, eZ);
-  vec3f trans_ray_origin = rayOrg - center;
-
-  float ray_azimuth = computeRayAzimuth(eX, eY, normRayDir);
-  float quartic_poly[5];
-  computeQuarticPoly(rotatedCoeffs, quartic_poly, ray_azimuth);
-
-  float ray_origin_z = dot(eZ, (rayOrg - center));
-  vec2f bounds = make_vec2f(boundRadius);
-
-  uniform double cylRhoMax = CylinderRMax(coeffs);
-  uniform double cylZMax   = CylinderZMax(coeffs);
-
-  vec2f cylBounds = intersectCylinderCaps(cRayOrg, rayDir, cylRhoMax, cylZMax);
-  bounds.x = max(bounds.x, cylBounds.x);
-  bounds.y = max(bounds.y, cylBounds.y);
-  float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, rayOrg, normRayDir, center, bounds);
-  isect.entry.hit = t > 0;
-  isect.entry.t = t;
-  isect.entry.N = get_sh_glyph_normal(coeffs, cRayOrg + t * rayDir);
-  return isect;
-
-  #elif 1
-  p = cRayOrg + dist * rayDir;
-  float io = shFunctions(p, coeffs);
-  bool movePos = io > 0;
-  for( int step=0; step<STEPS_; step++) {
-    stepTotal = step;
-    if (abs(io) < EPSILON)
-      break;
-    p = cRayOrg + dist * rayDir;
-    if ((movePos && io < 0) ||(!movePos && io > 0)) {
-      step_size = -0.5 * step_size;
-      movePos = !movePos;
-    }
-    io = shFunctions(p, coeffs);
-
-    dist += step_size;
-  }
-  #else
-  vec3f gradient;
-  float io = 100.f;
-  float f = 100.f;
-  isect.entry.u = 0.0;
-  for(int step=0; step<STEPS_; step++) {
-    if (step == STEPS_-1) return isect;
-    if (dist > max_dist) return isect;
-    if(abs(io) < EPSILON) break;
-    p = cRayOrg + dist * rayDir;
-    io = shFunctions(p, coeffs);
-    dist += io*0.15;
-    isect.entry.u = (float)step/(float)STEPS_;
-    isect.entry.u = shFunctions(p, coeffs);
-  }
-  #endif
-  /* isect.entry.hit = abs(io) < EPSILON; */
-  /* isect.entry.hit = true; */
-  /* isect.entry.t = dist; */
-  /* isect.entry.N = normalize(SHGradient(p, coeffs)); */
-  /* isect.entry.u = (float)stepTotal/(float)STEPS_; */
-
-  return isect;
-}
-
-bool assertEqual(struct complex& res, struct complex& expected, float epsilon) {
-  assert(abs(res.real-expected.real) < epsilon);
-  assert(abs(res.imaginary-expected.imaginary) < epsilon);
-}
-
-void testComplexMath()
-{
-  struct complex a, b, expected;
-  a.real = 3.2;
-  a.imaginary = 2.9;
-  b.real = 1.7;
-  b.imaginary = 7.6;
-  expected.real = 4.9;
-  expected.imaginary = 10.5;
-
-  struct complex res = plus(a, b);
-  assertEqual(res, expected, 1.0e-16);
-
-  res = plus(a, b.real);
-  expected.imaginary = a.imaginary;
-  assertEqual(res, expected, 1.0e-16);
-
-  res = minus(a, b);
-  expected.real = 1.5;
-  expected.imaginary = -4.7;
-  assertEqual(res, expected, 1.0e-16);
-
-  res = minus(a, b.real);
-  expected.imaginary = a.imaginary;
-  assertEqual(res, expected, 1.0e-16);
-
-  res = times(a, b);
-  expected.real = -16.6;
-  expected.imaginary = 29.25;
-  assertEqual(res, expected, 1.0e-16);
-
-  res = times(a, b.real);
-  expected.real = 5.44;
-  expected.imaginary = 4.93;
-  assertEqual(res, expected, 1.0e-6);
-
-  res = conj(a);
-  expected.real = a.real;
-  expected.imaginary = -a.imaginary;
-  assertEqual(res, expected, 1.0e-16);
-
-  res = divide(a, b);
-  expected.real = 0.45309150865622423742786479802143446001648804616;
-  expected.imaginary = -0.3197032151690024732069249793899422918384171475;
-  assertEqual(res, expected, 1.0e-7);
-
-  res = divide(a.real, b);
-  expected.real = 0.08969497114591920857378400659521846661170651277;
-  expected.imaginary = -0.4009892827699917559769167353668590272052761747;
-  assertEqual(res, expected, 1.0e-7);
-
-  float absRes = abs(a);
-  float absExpected = 4.31856457633783681736543127297124342394929;
-  assert(abs(absRes-absExpected) < 1.0e-6);
-
-  res = sqrt(a);
-  expected.real = 1.9388868683264937747198454519510440355532917532;
-  expected.imaginary = 0.747851782219524037073515212692618569187849779814;
-  assertEqual(res, expected, 1.0e-6);
-
-  /* res = complex polar(float r, float theta); */
-  /* expected.real = 1.9388868683264937747198454519510440355532917532; */
-  /* expected.imaginary = 0.747851782219524037073515212692618569187849779814; */
-  /* assertEqual(res, expected, 1.0e-6); */
-}
-
-void testPolyGen()
-{
-  uniform vec3f ray_origin = make_vec3f(-4.0, 2.0, 1.0);
-  uniform vec3f ray_dir = normalize(make_vec3f(0.3, 0.6, 0.2) - ray_origin);
-  uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
-
-  /* uniform float sh_coeffs[] = {1.74, -0.72, 0.62, 2.77, -1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34}; */
-  uniform float sh_coeffs[] = {2.74, 0.72, 0.62, 2.77, 1.65, -0.53, -0.58, 1.09, 0.28, -0.36, 0.46, 0.28, -0.06, 0.80, 1.34};
-
-  struct ortho_frame frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
-  assert(abs(frame.frame_to_ray_space.vx.x-1) < 1e-2);
-  assert(abs(frame.frame_to_ray_space.vx.y-0) < 1e-2);
-  assert(abs(frame.frame_to_ray_space.vy.x-13.21034026) < 1e-2);
-  assert(abs(frame.frame_to_ray_space.vy.y-2.73521048) < 1e-2);
-  assert(abs(frame.ray_dot_offset+4.829734439470606) < 1e-5);
-  assert(abs(frame.closest_dist-0.3656025768393324) < 1e-5);
-
-  float sh_poly[5];
-  get_planar_sh_polynomial_4(sh_coeffs, ray_dir, frame.closest_dir, sh_poly);
-  uniform float sh_poly_expected[] = {-0.60574789, -0.15240334, 5.47919848, 1.16134442, -1.06103006};
-  for (int i = 0; i < 5; ++i)
-    assert(abs(sh_poly[i] - sh_poly_expected[i]) < 0.01);
-
-  float poly[11];
-  vec3f debug_col;
-  get_poly(sh_coeffs, ray_dir, frame, poly, debug_col);
-
-  /* uniform float poly_expected[] = {13.71435791, -63.44664606, -18.73962682, 266.07121489, -90.01305531, -242.44113876, 132.2596363, -8.33365172, -4.8709771, 0., -1.}; */
-  uniform float poly_expected[] = {1.7451452, 1.38133141, -54.4878012, -23.02064505, 221.57152102, 97.63108088, -86.89708528, -18.43742326, 3.42241967, 0, -1};
-  for (int i = 0; i < 11; ++i)
-    assert(abs(poly[i] - poly_expected[i]) < 0.01);
-
-  complex a[11];
-  for (int i = 0; i < 11; ++i) {
-    a[i].real = poly[i];
-    a[i].imaginary = 0;
-  }
-  complex x = {0,0};
-  laguer(a, x, 11);
-  /* assert(abs(x.real - 0.258963461279) < 1e-5); */
-
-  complex roots[11];
-  zroots(poly, roots, true, debug_col);
-
-  /* uniform float roots_expected[] = {-3.53524969, -0.838972339, -0.610389532, -0.185069938, -0.185069938, 0.258963461, 0.530182315, 0.862587817, 1.85150892, 1.85150892}; */
-  uniform float roots_expected[] = {-2.40677821, -2.40677821, -1.18021726, -0.503356058, -0.185389615, 0.202432102, 0.470091109, 1.75097087, 2.12951264, 2.12951264};
-  for (int i = 0; i < 10; ++i)
-    assert(abs(roots[i].real - roots_expected[i]) < 1.0e-5);
-
-  float ray_roots[11];
-  for (int i = 0; i < 11; ++i)
-    ray_roots[i] = roots[i].real * frame.closest_dist - frame.ray_dot_offset;
-  /* rootsToRaySpace(roots, ray_roots, frame); */
-
-  uniform float ray_roots_expected[] = {3.94981012, 3.94981012, 4.39824397, 4.64570617, 4.76195552, 4.90374414, 5.00160096, 5.46989390, 5.60828975, 5.60828975};
-  for (uniform int i = 0; i < 10; ++i)
-    assert(abs(ray_roots[i] - ray_roots_expected[i]) < 1.0e-5);
-
-  SHIntersections hitData;
-  hitData.numIntersections = 0;
-  filterRealRoots(roots, ray_roots, &hitData);
-
-  uniform float real_ray_roots_expected[] = {4.39824397, 4.64570617, 4.76195552, 4.90374414, 5.00160096, 5.4698939};
-  for (uniform int i = 0; i < 6; ++i)
-    assert(abs(hitData.roots[i] - real_ray_roots_expected[i]) < 1.0e-5);
-
- uniform float expected_normal_x[] = {0.92151299, -0.84139649, -0.6115183, 0.4085241,  0.41099025, -0.3888063};
- uniform float expected_normal_y[] = {0.38685129, -0.51184689, -0.43766273, -0.78588093, -0.91086316, 0.39639405};
- uniform float expected_normal_z[] = {-0.03405709, 0.17339178, 0.65916364, 0.46421894,  0.03762067, 0.83168589};
-  vec3f cRayOrg = ray_origin - glyph_center;
-  for (uniform int i = 0; i < 6; ++i){
-    /* print("glyph center: %,%,%\n", glyph_center.x, glyph_center.y, glyph_center.z); */
-    /* print("ray origin: %,%,%\n", ray_origin.x, ray_origin.y, ray_origin.z); */
-    /* print("ray dir: %,%,%\n", ray_dir.x, ray_dir.y, ray_dir.z); */
-    vec3f temp = ray_origin + hitData.roots[i] * ray_dir;
-    vec3f p = ray_origin + hitData.roots[i] * ray_dir - glyph_center;
-    vec3f n = get_sh_glyph_normal(sh_coeffs, p);
-    assert(abs(expected_normal_x[i] - n.x) < 1.0e-1);
-    assert(abs(expected_normal_y[i] - n.y) < 1.0e-1);
-    assert(abs(expected_normal_z[i] - n.z) < 1.0e-1);
-  }
-}
-
-void testPolyGenInverseRotation()
-{
-    vec3f ray_origin = make_vec3f(-4.0, 2.0, 1.0);
-    vec3f ray_dir = make_vec3f(0.3, 0.6, 0.2) - ray_origin;
-    ray_dir = normalize(ray_dir);
-    uniform vec3f glyph_center = make_vec3f(0.4, 0.3, -0.1);
-    vec3f up = make_vec3f(0.123, 0.456, 0.789);
-    uniform float rotatedCoeffs[] = {2.74, -0.2043146, 0.23099068, -0.88960413, 0.36400692,
-        3.2496311, -0.37610309, 0.22094306, 0.06994055, -0.8917885, -1.55573379, 0.03138365,
-        -0.94377666, -0.23810967, -0.32023285};
-    float * uniform coeffsP = rotatedCoeffs;
-
-    vec3f eyePosT = ray_origin - glyph_center;
-    vec3f eX, eY, eZ;
-    get_viewpoint_rotation(ray_origin, glyph_center, up, eX, eY, eZ);
-    float ray_azimuth = computeRayAzimuth(eX, eY, ray_dir);
-    assert(abs(ray_azimuth - 1.795589488015444) < 1e-5);
-
-    float quartic_poly[5];
-    computeQuarticPoly(coeffsP, quartic_poly, ray_azimuth);
-    float expectedPoly[] = {-1.104800748763063, 0.006163892127587072, 5.529566828401396, -0.8665370760190302, -0.5787666440776555};
-    for (int i = 0; i < 5; ++i) assert(abs(quartic_poly[i]-expectedPoly[i]) < 1e-5);
-
-    float ray_origin_z = length(eyePosT);
-    assert(abs(ray_origin_z-4.843552415324934) < 1e-5);
-
-    vec2f bounds = make_vec2f(5);
-
-    uniform double cylRhoMax = CylinderRMax(rotatedCoeffs);
-    uniform double cylZMax   = CylinderZMax(rotatedCoeffs);
-
-    vec2f cylBounds = intersectCylinderCaps(ray_origin, ray_dir, cylRhoMax, cylZMax);
-
-    // Determine how z maps to radius (Eq. (46))
-    float dir_x = dot(eX, ray_dir);
-    assert(abs(dir_x+0.016825366481273626) < 1e-5);
-    float dir_y = dot(eY, ray_dir);
-    assert(abs(dir_y-0.07358320313834571) < 1e-5);
-    float radius_factor = sqrt(dir_x * dir_x + dir_y * dir_y) / dot(eZ, ray_dir);
-    assert(abs(radius_factor+0.07569827729066748) < 1e-5);
-    float radius_summand = -ray_origin_z * radius_factor;
-    assert(abs(radius_summand-0.3666485738071491) < 1e-5);
-
-    float t = getAlmsickIntersection(quartic_poly, eX, eY, eZ, ray_origin, ray_dir, glyph_center, cylBounds, 1000);
-    assert(abs(t-4.406966852859168) < 1e-2);
+  get_sh_glyph_intersections(out_ray_roots, coeffs, center, rayOrg, rayDir);
 }

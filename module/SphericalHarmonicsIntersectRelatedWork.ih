@@ -1,0 +1,321 @@
+#include "rkcommon/math/vec.ih"
+#include "math/AffineSpace.ih"
+#include "sh.ih"
+#include "wigner.ih"
+#include "camera/PerspectiveCameraShared.h"
+#include "SphericalHarmonicsIntersect.ih"
+
+#define NO_INTERSECTION 3.4e+38f
+
+inline float dot(vec2f a, vec2f b) {
+    return a.x*a.x + b.y*b.y;
+}
+
+inline vec2f normalize(vec2f a) {
+    return a / sqrt(a.x*a.x + a.y*a.y);
+}
+
+
+// Constructs a rotation matrix to map to a coordinate frame where the vector
+// from the glyph center to the camera position is aligned with the positive
+// z-axis.
+// \param camera_pos The camera position.
+// \param glyph_center The center position of the SH glyph.
+// \param up An up vector for the camera (which does not point towards the
+//	 glyph center).
+// \return A 3x3 special orthogonal matrix describing the rotation.
+linear3f get_viewpoint_rotation(vec3f camera_pos, uniform vec3f glyph_center, vec3f up) {
+	vec3f z = normalize(camera_pos - glyph_center);
+	vec3f x = normalize(cross(up, z));
+	vec3f y = cross(z, x);
+	return transposed(make_LinearSpace3f(x, y, z));
+}
+
+
+// Turns a rotation matrix into Euler angles using the conventions in Eqs. 18
+// to 20 of "GPU-based ray-casting of spherical functions applied to high
+// angular resolution diffusion imaging", IEEE TVCG 17:5.
+void rotation_to_euler(float& out_alpha, float& out_beta, float& out_gamma, linear3f rotation) {
+	/* out_gamma = atan(rotation.vy.z, -rotation.vx.z); */
+	/* out_beta = atan(sqrt(rotation.vx.z * rotation.vx.z + rotation.vy.z * rotation.vy.z), rotation.vz.z); */
+	/* out_alpha = atan(rotation.vz.y, rotation.vz.x); */
+        out_gamma = atan2(rotation.vz.y, -rotation.vz.x); // from code
+        out_beta  = atan2(sqrt(rotation.vz.x * rotation.vz.x + rotation.vz.y * rotation.vz.y), rotation.vz.z); // from code
+        out_alpha = atan2(rotation.vy.z, rotation.vx.z); // from code
+}
+
+
+// Constructs a (not so tight) bounding cylinder for a spherical harmonics
+// glyph.
+// \param out_radius The glyph will be contained in a cylinder around the
+//		z-axis of this radius.
+// \param out_z An upper bound for z-coordinates of the glyph.
+// \param sh_coeffs Spherical harmonics coefficients for bands 0, 2 and 4. See
+//		evaluate_sh_4() for their order.
+void get_bounding_cylinder(float& out_radius, float& out_z, uniform float * uniform sh_coeffs) {
+	const float radius_max[15] = {
+		0.282095f,
+		0.386274f, 0.297354f, 0.315392f, 0.297354f, 0.386274f,
+		0.442533f, 0.358249f, 0.334523f, 0.311653f, 0.317357f, 0.311653f, 0.334523f, 0.358249f, 0.442533f,
+	};
+	const float z_max[15] = {
+		0.282095f,
+		0.148677f, 0.297354f, 0.630783f, 0.297354f, 0.148677f,
+		0.126660f, 0.232690f, 0.335275f, 0.459798f, 0.846284f, 0.459798f, 0.335275f, 0.232690f, 0.126660f,
+	};
+	out_radius = out_z = 0.0f;
+	// [[unroll]]
+	for (uniform int i = 0; i != 15; ++i) {
+		out_radius += radius_max[i] * abs(sh_coeffs[i]);
+		out_z += z_max[i] * abs(sh_coeffs[i]);
+	}
+}
+
+
+// Like get_sh_glyph_intersections() but implemented using the method from
+// "GPU-based ray-casting of spherical functions applied to high angular
+// resolution diffusion imaging", IEEE TVCG 17:5. Pass true for closest_hit
+// if you only care about out_ray_roots[0].
+void get_sh_glyph_intersections_almsick(float out_ray_roots[10], const uniform float * uniform rot_sh_coeffs, const uniform vec3f glyph_center, vec3f ray_origin, vec3f ray_dir, bool closest_hit, const uniform PerspectiveCamera* camera) {
+	Intersections isect;
+	isect.entry.hit = false;
+	isect.exit.hit = false;
+	isect.entry.t = -inf;
+	isect.exit.t = -inf;
+	// The default outcome are no intersections
+	// [[unroll]]
+	for (uniform int i = 0; i != 10; ++i)
+		out_ray_roots[i] = NO_INTERSECTION;
+	// Rotate the SH coefficients suitably
+	vec3f up = normalize(camera->dv_up);
+	linear3f rotation = get_viewpoint_rotation(ray_origin, glyph_center, up);
+
+	// Prepare some sines and cosines for construction of the polynomial
+	float cosines[5];
+	float sines[5];
+	cosines[0] = 1.0f;
+	sines[0] = 0.0f;
+	vec3f dir = rotation * ray_dir;
+	vec2f normed_dir_xy = normalize(make_vec2f(dir.x, dir.y));
+	cosines[1] = normed_dir_xy.x;
+	sines[1] = normed_dir_xy.y;
+	// [[unroll]]
+	for (uniform int i = 2; i != 5; ++i) {
+		cosines[i] = cosines[1] * cosines[i - 1] - sines[1] * sines[i - 1];
+		sines[i] = cosines[1] * sines[i - 1] + sines[1] * cosines[i - 1];
+	}
+	// Construct the quartic polynomial for the ray (c^even)
+	float poly[5] = {
+		0.5f / sqrt(PI) * (rot_sh_coeffs[0] + sqrt(5.0f) * rot_sh_coeffs[3] + 3.0f * rot_sh_coeffs[10]),
+		sqrt(1.25f / PI) * ((sqrt(3.0f) * rot_sh_coeffs[2] + 3.0f * sqrt(2.0f) * rot_sh_coeffs[9]) * cosines[1]
+							- (sqrt(3.0f) * rot_sh_coeffs[4] + 3.0f * sqrt(2.0f) * rot_sh_coeffs[11]) * sines[1]),
+		0.25f / sqrt(PI) * (sqrt(5.0f) * (sqrt(3.0f) * rot_sh_coeffs[5] + 9.0f * rot_sh_coeffs[12]) * sines[2]
+							+ sqrt(5.0f) * (sqrt(3.0f) * rot_sh_coeffs[1] + 9.0f * rot_sh_coeffs[8]) * cosines[2]
+							+ 4.0f * rot_sh_coeffs[0] + sqrt(5.0f) * rot_sh_coeffs[3] - 18.0f * rot_sh_coeffs[10]),
+		0.125f * sqrt(5.0f / PI) * ((9.0f * sqrt(2.0f) * rot_sh_coeffs[11] - 4.0f * sqrt(3.0f) * rot_sh_coeffs[4]) * sines[1]
+									+ 3.0f * sqrt(14.0f) * (rot_sh_coeffs[7] * cosines[3] - rot_sh_coeffs[13] * sines[3])
+									+ (4.0f * sqrt(3.0f) * rot_sh_coeffs[2] - 9.0f * sqrt(2.0f) * rot_sh_coeffs[9]) * cosines[1]),
+		1.0f / (16.0f * sqrt(PI)) * (3.0f * sqrt(35.0f) * (rot_sh_coeffs[14] * sines[4] + rot_sh_coeffs[6] * cosines[4])
+									+ 2.0f * sqrt(5.0f) * (2.0f * sqrt(3.0f) * rot_sh_coeffs[5] - 3.0f * rot_sh_coeffs[12]) * sines[2]
+									+ 2.0f * sqrt(5.0f) * (2.0f * sqrt(3.0f) * rot_sh_coeffs[1] - 3.0f * rot_sh_coeffs[8]) * cosines[2]
+									+ 8.0f * rot_sh_coeffs[0] - 4.0f * sqrt(5.0f) * rot_sh_coeffs[3] + 9.0f * rot_sh_coeffs[10])
+	};
+	// Find bounds for the ray
+	vec3f ray_origin_z_vec = (rotation * (ray_origin - glyph_center));
+	float ray_origin_z = ray_origin_z_vec.z;
+	float cylinder_radius, cylinder_z;
+	get_bounding_cylinder(cylinder_radius, cylinder_z, rot_sh_coeffs);
+	float start = min(cylinder_z, ray_origin_z);
+	float dir_radius = sqrt(dir.x * dir.x + dir.y * dir.y);
+	float end = max(-cylinder_z, ray_origin_z + dir.z / dir_radius * cylinder_radius);
+	if (end >= start)
+		return;
+	// Determine how z maps to radius (Eq. (46))
+	float radius_factor = dir_radius / dir.z;
+	float radius_summand = -ray_origin_z * radius_factor;
+	// Start ray marching
+	const int step_count = 100;
+	float ray_step = (end - start) / (step_count - 1.0);
+	float z = start;
+	float prev_sdf = 0.0f;
+	int intersection_count = 0;
+	// [[loop]]
+	for (uniform int i = 0; i != step_count; ++i) {
+		float radius = radius_factor * z + radius_summand;
+		// Evaluate a homogeneous polynomial using Horner's method
+		float q = radius / z;
+		float poly_value = ((((poly[4]* q+ poly[3])* q+ poly[2])* q+ poly[1])* q+ poly[0]);
+		float norm = sqrt(radius * radius + z * z);
+		float normed_z = z / norm;
+		float normed_z_2 = normed_z * normed_z;
+		poly_value *= normed_z_2 * normed_z_2;
+		// Evaluate the signed distance function and check for an intersection
+		float sdf = abs(poly_value) - norm;
+		if (prev_sdf * sdf < 0.0f) {
+			// Use regula falsi
+			float intersect_z = z + sdf * ray_step / (prev_sdf - sdf);
+			float z_difference = intersect_z - ray_origin_z;
+			float t = sqrt(z_difference * z_difference + radius * radius);
+			if (closest_hit) {
+				out_ray_roots[0] = t;
+				return;
+			}
+			else {
+				// Avoid sPIlling
+				// [[unroll]]
+				for (uniform int i = 0; i != 10; ++i)
+					if (i == intersection_count)
+						out_ray_roots[i] = t;
+				++intersection_count;
+			}
+		}
+		z += ray_step;
+		prev_sdf = sdf;
+	}
+}
+
+
+// Computes intersections between a circle centered around the origin and a
+// ray. Roots are sorted. Returns false if there are no intersections.
+bool get_circle_intersections(float out_intersections[2], vec2f ray_origin, vec2f ray_dir, float circle_radius) {
+	float a = dot(ray_dir, ray_dir);
+	float b_half = dot(ray_origin, ray_dir);
+	float c = dot(ray_origin, ray_origin) - circle_radius * circle_radius;
+	float discriminant = b_half * b_half - a * c;
+	if (discriminant < 0.0f)
+		return false;
+	float sqrt_discriminant = sqrt(discriminant);
+	out_intersections[0] = (-b_half - sqrt_discriminant) / a;
+	out_intersections[1] = (-b_half + sqrt_discriminant) / a;
+	return true;
+}
+
+
+// Like get_sh_glyph_intersections() but implements ray marching with
+// evaluation of the full SH basis at each step. Ray marching samples a
+// cylinder centered around the global z-axis.
+void get_sh_glyph_intersections_naive(float out_ray_roots[10], uniform float * uniform sh_coeffs, uniform vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) {
+	ray_origin = ray_origin - glyph_center;
+	// The default outcome are no intersections
+	// [[unroll]]
+	for (uniform int i = 0; i != 10; ++i)
+		out_ray_roots[i] = NO_INTERSECTION;
+	// Find bounds for the ray
+	float cylinder_radius, cylinder_z;
+	get_bounding_cylinder(cylinder_radius, cylinder_z, sh_coeffs);
+	float ray_plane_intersections[2] = {
+		(-cylinder_z - ray_origin.z) / ray_dir.z,
+		(+cylinder_z - ray_origin.z) / ray_dir.z,
+	};
+	float ray_cylinder_intersections[2];
+	if (!get_circle_intersections(ray_cylinder_intersections, make_vec2f(ray_origin.x, ray_origin.y), make_vec2f(ray_dir.x, ray_dir.y), cylinder_radius))
+		return;
+	float start = max(min(ray_plane_intersections[0], ray_plane_intersections[1]), ray_cylinder_intersections[0]);
+	float end = min(max(ray_plane_intersections[0], ray_plane_intersections[1]), ray_cylinder_intersections[1]);
+	if (end <= start)
+		return;
+	// Start ray marching
+	const int step_count = 100;
+	float ray_step = (end - start) / (step_count - 1.0);
+	float prev_sdf = 0.0f;
+	int intersection_count = 0;
+	for (uniform int i = 0; i != step_count; ++i) {
+		float t = start + i * ray_step;
+		vec3f point = ray_origin + t * ray_dir;
+		// Evaluate the SH polynomial
+		float shs[15];
+		evaluate_sh_4(shs, point);
+		float poly_value = 0.0f;
+		// [[unroll]]
+		for (uniform int j = 0; j != 15; ++j)
+			poly_value += sh_coeffs[j] * shs[j];
+		// Evaluate the signed distance function and check for an intersection
+		float norm_2 = dot(point, point);
+		float sdf = abs(poly_value) - norm_2 * norm_2 * sqrt(norm_2);
+		if (prev_sdf * sdf < 0.0f) {
+			// Use regula falsi
+			float intersect_t = t + sdf * ray_step / (prev_sdf - sdf);
+			// Avoid sPIlling
+			// [[unroll]]
+			for (uniform int i = 0; i != 10; ++i)
+				if (i == intersection_count)
+					out_ray_roots[i] = intersect_t;
+			intersection_count += 1;
+		}
+		prev_sdf = sdf;
+	}
+	sort_10(out_ray_roots);
+}
+
+
+// A method that is very similar to get_sh_glyph_intersections() but computes
+// roots in terms of the ray parameter directly. Less stable.
+void get_sh_glyph_intersections_ray_parameter(float out_ray_roots[10], uniform float * uniform sh_coeffs, uniform vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) {
+	// Compute bounds on the roots as in the other method
+	orthogonal_frame_t frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
+	float sh_poly[5];
+	get_planar_sh_polynomial_4(sh_poly, sh_coeffs, frame.ray_dir, frame.closest_dir);
+	float sh_poly_bound = abs(sh_poly[0]) + abs(sh_poly[4]) + 0.325f * (abs(sh_poly[1]) + abs(sh_poly[3])) + 0.25f * abs(sh_poly[2]);
+	float root_bound_sq = sh_poly_bound * (sh_poly_bound / frame.closest_dist_sq) - 1.0f;
+	if (root_bound_sq < 0.0f) {
+		// There are no intersections
+		// [[unroll]]
+		for (uniform int i = 0; i != 10; ++i)
+			out_ray_roots[i] = NO_INTERSECTION;
+		return;
+	}
+	float root_bound = sqrt(root_bound_sq);
+	float root_bound_min = -root_bound * sqrt(frame.closest_dist_sq) - frame.ray_dot_offset;
+	float root_bound_max =  root_bound * sqrt(frame.closest_dist_sq) - frame.ray_dot_offset;
+	// Now embrace the bad approach properly
+	ray_origin = ray_origin - glyph_center;
+	// Get a polynomial for the SH polynomial in terms of the ray parameter
+	get_planar_sh_polynomial_4(sh_poly, sh_coeffs, ray_dir, ray_origin);
+	// Square this polynomial and multiply by y^2 (i.e. append two zeros)
+	float poly[11] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	// [[unroll]]
+	for (uniform int i = 0; i != 5; ++i)
+		// [[unroll]]
+		for (uniform int j = 0; j != 5; ++j)
+			poly[i + j] += sh_poly[i] * sh_poly[j];
+	// Subtract ||x*ray_origin + y*ray_dir||^10 (which can be computed using
+	// the multinomial theorem)
+	float origin_dot_1 = 2.0f * dot(ray_origin, ray_dir);
+	float origin_dot_2 = origin_dot_1 * origin_dot_1;
+	float origin_dot_3 = origin_dot_2 * origin_dot_1;
+	float origin_dot_4 = origin_dot_2 * origin_dot_2;
+	float origin_dot_5 = origin_dot_3 * origin_dot_2;
+	float origin_len_2 = dot(ray_origin, ray_origin);
+	float origin_len_4 = origin_len_2 * origin_len_2;
+	float origin_len_6 = origin_len_4 * origin_len_2;
+	float origin_len_8 = origin_len_4 * origin_len_4;
+	float origin_len_10 = origin_len_6 * origin_len_4;
+	poly[10] -= 1.0f;
+	poly[9] -= 5.0f * origin_dot_1;
+	poly[8] -= 10.0f * origin_dot_2;
+	poly[7] -= 10.0f * origin_dot_3;
+	poly[6] -= 5.0f * origin_dot_4;
+	poly[5] -= 1.0f * origin_dot_5;
+	poly[8] -= 5.0f * origin_len_2;
+	poly[7] -= 20.0f * origin_len_2 * origin_dot_1;
+	poly[6] -= 30.0f * origin_len_2 * origin_dot_2;
+	poly[5] -= 20.0f * origin_len_2 * origin_dot_3;
+	poly[4] -= 5.0f * origin_len_2 * origin_dot_4;
+	poly[6] -= 10.0f * origin_len_4;
+	poly[5] -= 30.0f * origin_len_4 * origin_dot_1;
+	poly[4] -= 30.0f * origin_len_4 * origin_dot_2;
+	poly[3] -= 10.0f * origin_len_4 * origin_dot_3;
+	poly[4] -= 10.0f * origin_len_6;
+	poly[3] -= 20.0f * origin_len_6 * origin_dot_1;
+	poly[2] -= 10.0f * origin_len_6 * origin_dot_2;
+	poly[2] -= 5.0f * origin_len_8;
+	poly[1] -= 5.0f * origin_len_8 * origin_dot_1;
+	poly[0] -= 1.0f * origin_len_10;
+	// Compute the roots
+	find_real_roots(out_ray_roots, poly, root_bound_min, root_bound_max, 1.0e-3f * (root_bound_max - root_bound_min));
+	// Get rid of NaNs
+	// [[unroll]]
+	for (uniform int i = 0; i != 10; ++i)
+		out_ray_roots[i] = isnan(out_ray_roots[i]) ? NO_INTERSECTION : out_ray_roots[i];
+	sort_10(out_ray_roots);
+}

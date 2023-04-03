@@ -28,6 +28,10 @@ using namespace ospray;
 using json = nlohmann::json;
 using Eigen::MatrixXd;
 
+#define renderSH 1
+
+enum SHRenderMethod { NewtonBisection = 0, Laguerre, Wigner };
+
 const std::string fullscreen_quad_vs = R"(
 #version 330 core
 
@@ -206,14 +210,14 @@ std::vector<glm::vec3>& wignerAngles) {
         glm::vec3 eZ = normalize(eyePosT);
         glm::vec3 eX = normalize(cross(viewUp, eZ));
         glm::vec3 eY = normalize(cross(eZ, eX));
-        float gamma = atan2(eY.z, -eX.z); // from code
-        float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z); // from code
-        float alpha = atan2(eZ.y, eZ.x); // from code
+        float gamma = atan2(eY.z, -eX.z);
+        float beta  = atan2(sqrt(eX.z * eX.z + eY.z * eY.z), eZ.z);
+        float alpha = atan2(eZ.y, eZ.x);
         wignerAngles[i] = glm::vec3(alpha, beta, gamma);
     }
 }
 
-void RealWignerZRotation(float* coefficients, float angle)
+void RealWignerZRotation(float* coeffs, float angle)
 {
 	// Do nothing if the angle is zero
 	if (angle == 0.0)
@@ -232,19 +236,27 @@ void RealWignerZRotation(float* coefficients, float angle)
 
   float a[15];
   for (int i = 0; i < 15; ++i)
-    a[i] = coefficients[i];
+    a[i] = coeffs[i];
 
-  int m[] = {0, 3, 10};
-  for (int l = 0; l < 5; l+=2) {
-        int m_0 = m[(int)(l/2)];
-        coefficients[m_0] = a[m_0];
-        for (int m = 1; m < l+1; ++m) {
-          float sine = (m%2 == 0) ? sines[m] : -sines[m];
-          coefficients[m_0 + m] = a[m_0 + m] * cosines[m] + a[m_0 - m] * sine;
-          coefficients[m_0 - m] = -a[m_0 + m] * sine + a[m_0 - m] * cosines[m];
-        }
-  }
+  // We just have to rotate pairs of basis functions that use the same
+	// Legendre polynomial. The rotation depends on the originally used
+	// degree of the sine/cosine and is applied using the angle sum identity:
+	// sin(a+b) =  sin(a)*cos(b) + cos(a)*sin(b)
+	// cos(a+b) = -sin(a)*sin(b) + cos(a)*cos(b)
+	// [[ unroll]]
+	for (int l = 0; l < 5; l += 2) {
+		const int ms[] = { 0, 3, 10};
+		int m_0 = ms[l / 2];
+		coeffs[m_0] = a[m_0];
+		// [[ unroll]]
+		for (int m = 0; m != l + 1; ++m) {
+			float sine = (m % 2 == 0) ? sines[m] : -sines[m];
+			coeffs[m_0 + m] = a[m_0 + m] * cosines[m] + a[m_0 - m] * sine;
+			coeffs[m_0 - m] = -a[m_0 + m] * sine + a[m_0 - m] * cosines[m];
+		}
+	}
 }
+
 void RealWignerYRotation(float* coeffs, float angle) {
     // Like rotate_sh_4_z() but for a rotation around the positive y-axis.
     // To be consistent with the specification of this function, we have to
@@ -344,7 +356,7 @@ void RealWignerYRotation(float* coeffs, float angle) {
         coeffs[i+1] = l2v[i];
     for (int i = 0; i < 9; ++i)
         coeffs[i+6] = l4v[i];
-    }
+}
 
 void rotateSH(std::vector<float>& coeffs, std::vector<float>& rotatedCoeffs, std::vector<glm::vec3>& wignerAngles) {
     for (int i = 0; i < wignerAngles.size(); ++i) {
@@ -469,11 +481,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             if (myline.find("END") != std::string::npos)
                 break;
         }
-        // for(int i = 0; i < 4; ++i)
-            // std::cout << "order " << i << ": " << stride_order[i] << "\n";
     int dims[] = {x,y,z,sh};
-        // for(int i = 0; i < 4; ++i)
-            // std::cout << "dims " << i << ": " << dims[i] << "\n";
     int stride_size[] = {0, 0, 0, 0};
     stride_size[3] = 1;
     int last_stride_size = sh;
@@ -508,11 +516,11 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     const glm::vec3 world_center(0.f);
     if (!cmdline_camera) {
         if (cmdline_file) {
-            cam_eye = world_center - glm::vec3(-50.f, 0.f, 0.f);
+            cam_eye = world_center - glm::vec3(50.f, 0.f, 0.f);
             cam_up = glm::vec3(0.f, 0.f, 1.f);
         }
         else {
-            cam_eye = world_center + glm::vec3(1e-5, 1e-5, 3.f);
+            cam_eye = world_center + glm::vec3(1e-5, 3, 3.f);
             cam_up = glm::vec3(0., 1.f, 0.f);
         }
         cam_at = world_center;
@@ -532,9 +540,22 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     renderer.setParam("backgroundColor", glm::vec4(0.f, 0.f, 0.f, 1.f));
     renderer.commit();
 
+    cam_eye = arcball.eye();
+    glm::vec3 cam_dir = arcball.dir();
+    cam_up = arcball.up();
+    glm::vec3 cam_right = cross(cam_dir, cam_up);
+
+    cpp::Camera camera("perspective");
+    camera.setParam("aspect", static_cast<float>(win_width) / win_height);
+    camera.setParam("position", cam_eye);
+    camera.setParam("direction", cam_dir);
+    camera.setParam("up", cam_up);
+    camera.setParam("fovy", 40.f);
+    camera.commit();
+
 
     // create and setup our geometry
-    #if 0 // regular tensor glyphs
+    #if !renderSH // regular tensor glyphs
 
     // Superquadric positions
     std::vector<glm::vec3> positions = {glm::vec3(-1.0f, -1.0f, 0.0f),
@@ -567,6 +588,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     #else
 
     if (cmdline_file) {
+        std::cout << "z slice: " << z/2 << "\n";
         std::vector<float> slice(&coeffs[getSHIndex(strides,x,y,z, 0,0,z/2)], &coeffs[getSHIndex(strides,x,y,z,0,0,z/2+1)]);
         coeffs = slice;
         z = 1;
@@ -582,39 +604,38 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     if (!cmdline_file)
         coeffs = makeRandomCoeffs(positions.size(), 1);
 
-    cam_eye = arcball.eye();
-    glm::vec3 cam_dir = arcball.dir();
-    cam_up = arcball.up();
-    glm::vec3 cam_right = cross(cam_dir, cam_up);
+    // SHRenderMethod shRenderMethod = SHRenderMethod::NewtonBisection;
+    // SHRenderMethod shRenderMethod = SHRenderMethod::Laguerre;
+    SHRenderMethod shRenderMethod = SHRenderMethod::Wigner;
 
-    cpp::Camera camera("perspective");
-    camera.setParam("aspect", static_cast<float>(win_width) / win_height);
-    camera.setParam("position", cam_eye);
-    camera.setParam("direction", cam_dir);
-    camera.setParam("up", cam_up);
-    camera.setParam("fovy", 40.f);
-    camera.commit();
-
-    std::vector<glm::vec3> wignerAngles(positions.size());
-    computeWignerAngles(cam_up, cam_eye, positions, wignerAngles);
-    std::vector<float> rotatedCoeffs(coeffs.size());
-    rotateSH(coeffs, rotatedCoeffs, wignerAngles);
-    std::vector<float> boundRadius(positions.size());
-    computeBoundRadius(coeffs, boundRadius);
+    std::vector<glm::vec3> wignerAngles;
+    std::vector<float> rotatedCoeffs;
+    std::vector<float> boundRadius;
+    if (shRenderMethod == SHRenderMethod::Wigner) {
+        wignerAngles.resize(positions.size());
+        computeWignerAngles(cam_up, cam_eye, positions, wignerAngles);
+        rotatedCoeffs.resize(coeffs.size());
+        rotateSH(coeffs, rotatedCoeffs, wignerAngles);
+        boundRadius.resize(positions.size());
+        computeBoundRadius(coeffs, boundRadius);
+    }
 
     cpp::Geometry mesh("spherical_harmonics");
     mesh.setParam("glyph.position", cpp::CopiedData(positions));
     mesh.setParam("glyph.coefficients", cpp::CopiedData(coeffs));
-    mesh.setParam("glyph.rotatedCoefficients", cpp::CopiedData(rotatedCoeffs));
-    mesh.setParam("glyph.degreeL", 4);
-    mesh.setParam("glyph.camera", camera);
-    mesh.setParam("glyph.boundRadius", cpp::CopiedData(boundRadius));
+    mesh.setParam("glyph.shRenderMethod", (uint)shRenderMethod);
+    if (shRenderMethod == SHRenderMethod::Wigner) {
+        mesh.setParam("glyph.rotatedCoefficients", cpp::CopiedData(rotatedCoeffs));
+        mesh.setParam("glyph.boundRadius", cpp::CopiedData(boundRadius));
+        mesh.setParam("glyph.camera", camera);
+    }
     mesh.commit();
+
     #endif
 
     // put the mesh into a model
     cpp::GeometricModel model(mesh);
-
+    #if 0
     float ns = 10.0f;
     glm::vec3 ks = glm::vec3(1.0f, 1.0f, 1.0f);
     OSPMaterial material = ospNewMaterial("sphharm", "obj");
@@ -622,6 +643,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     ospSetParam(material, "ns", OSP_FLOAT, &ns);
     ospCommit(material);
     model.setParam("material", material);
+    #endif
     model.commit();
 
     cpp::Group group;
@@ -636,7 +658,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     light.commit();
 
     cpp::Light dir_light("distant");
-    dir_light.setParam("direction", glm::vec3(-1,1,-1));
+    dir_light.setParam("direction", glm::vec3(1,-1,1));
     dir_light.commit();
 
     cpp::World world;
@@ -647,7 +669,6 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
 
     cpp::FrameBuffer fb(win_width, win_height, OSP_FB_SRGBA, OSP_FB_COLOR | OSP_FB_ACCUM);
     fb.clear();
-
     Shader display_render(fullscreen_quad_vs, display_texture_fs);
     display_render.uniform("img", 0);
 
@@ -730,7 +751,7 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
                     }
                     prev_mouse = cur_mouse;
                 } else if (event.type == SDL_MOUSEWHEEL) {
-                    arcball.zoom(event.wheel.y / 50.f);
+                    arcball.zoom(event.wheel.y / 10.f);
                     camera_changed = true;
                 }
             }
@@ -781,10 +802,14 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             camera.setParam("up", cam_up);
             pending_commits.push_back(camera.handle());
 
-            computeWignerAngles(cam_up, cam_eye, positions, wignerAngles);
-            rotateSH(coeffs, rotatedCoeffs, wignerAngles);
-            mesh.setParam("glyph.rotatedCoefficients", cpp::CopiedData(rotatedCoeffs));
-            pending_commits.push_back(mesh.handle());
+            #if renderSH
+            if (shRenderMethod == SHRenderMethod::Wigner) {
+                computeWignerAngles(cam_up, cam_eye, positions, wignerAngles);
+                rotateSH(coeffs, rotatedCoeffs, wignerAngles);
+                mesh.setParam("glyph.rotatedCoefficients", cpp::CopiedData(rotatedCoeffs));
+                pending_commits.push_back(mesh.handle());
+            }
+            #endif
         }
 
         ImGui_ImplOpenGL3_NewFrame();

@@ -1,0 +1,154 @@
+#pragma once
+
+#include "rkcommon/math/vec.ih"
+
+#define MAX_DEGREE 10
+
+
+
+// Evaluates the given polynomial.
+// \param x Location at which to evaluate.
+// \param poly Polynomial coefficients starting with the lowest exponent.
+// \return The requested value.
+float evaluate_polynomial(float x, float poly[MAX_DEGREE + 1]) {
+	float ret = poly[MAX_DEGREE];
+	// unroll
+	for (uniform int i = MAX_DEGREE - 1; i != -1; --i)
+		ret = ret * x + poly[i];
+	return ret;
+}
+
+
+// Like evaluate_polynomial() but additionally returns the derivative in y.
+vec2f evaluate_polynomial_and_derivative(float x, float poly[MAX_DEGREE + 1]) {
+	float ret_1 = poly[MAX_DEGREE];
+	float ret_0 = poly[MAX_DEGREE] * x + poly[MAX_DEGREE - 1];
+	// unroll
+	for (uniform int i = MAX_DEGREE - 2; i != -1; --i) {
+		ret_1 = ret_1 * x + ret_0;
+		ret_0 = ret_0 * x + poly[i];
+	}
+	return make_vec2f(ret_0, ret_1);
+}
+
+
+// Given a polynomial of degree MAX_DEGREE, this function takes its derivative
+// repeatedly until it is quadratic and computes its real roots. Returns true
+// if real roots exist. In that case, two roots are output.
+bool solve_quadratic_derivative(vec2f& out_roots, float poly[MAX_DEGREE + 1]) {
+    // Maps an index to its factorial. For larger inputs, the factorial does not
+    // fit into an integer.
+	const static uniform int uniform factorial[] = {
+	1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800, 39916800, 479001600};
+
+	float a = (factorial[MAX_DEGREE - 0] / factorial[2]) * poly[MAX_DEGREE];
+	float b = (factorial[MAX_DEGREE - 1] / factorial[1]) * poly[MAX_DEGREE - 1];
+	float c = (factorial[MAX_DEGREE - 2] / factorial[0]) * poly[MAX_DEGREE - 2];
+	float discriminant = b * b - 4.0f * a * c;
+	if (discriminant < 0.0f)
+		return false;
+	float sqrt_discriminant = sqrt(discriminant);
+	float offset_b = b + ((b >= 0.0f) ? sqrt_discriminant : -sqrt_discriminant);
+	out_roots.x = -2.0f * c / offset_b;
+	out_roots.y = -offset_b / (2.0f * a);
+	return true;
+}
+
+
+// Computes a root of the given polynomial in an interval. Only works if there
+// is a single root in the interval.
+// \param poly Polynomial coefficients starting with the lowest exponent.
+// \param begin Left end of an interval.
+// \param end Right end of the interval.
+// \param begin_value The value of the derivative at begin. Only the sign
+//		matters.
+// \param error_tolerance When the ratio abs(polynomial / derivative) falls
+//		below this threshold, the current iteration is the last iteration.
+// \return The location of a single root in the interval.
+float newton_bisection(float poly[MAX_DEGREE + 1], float begin, float end, float begin_value, float error_tolerance) {
+	float guess = 0.5f * begin + 0.5f * end;
+	// loop
+	for (uniform int i = 0; i != 50; ++i) {
+		// Evaluate the function and its derivative
+		vec2f derivatives = evaluate_polynomial_and_derivative(guess, poly);
+		// Update the interval
+		float value_product = derivatives.x * begin_value;
+		begin = (value_product > 0.0f) ? guess : begin;
+		end = (value_product > 0.0f) ? end : guess;
+		// Implement Newton's method
+		float newton_step = derivatives.x / derivatives.y;
+		float newton_guess = guess - newton_step;
+		// Use either Newton's guess or bisection
+		guess = (begin < newton_guess && newton_guess < end) ? newton_guess : (0.5f * begin + 0.5f * end);
+		// Terminate if the Newton step size is below a threshold
+		if (abs(newton_step) < error_tolerance)
+			return guess;
+	}
+	return guess;
+}
+
+
+// Computes all real roots of the given real polynomial in the given interval.
+// It uses bracketed Newton bisection as described in "High-Performance
+// Polynomial Root Finding for Graphics", Cem Yuksel 2022, Proceedings of the
+// ACM on Computer Graphics and Interactive Techniques 5:3:
+// https://doi.org/10.1145/3543865
+// \param out_roots A sorted list of the requested roots. Some entries will be
+//		NaN to indicate complex roots.
+// \param poly Polynomial coefficients starting with the lowest exponent.
+// \param begin Left end of an interval.
+// \param end Right end of the interval.
+// \param error_tolerance Error tolerance for newton_bisection(). The error in
+//		roots will typically be much smaller than this tolerance but there is
+//		no strong guarantee and the tolerance may be surpassed.
+void find_real_roots(float out_roots[MAX_DEGREE], float poly[MAX_DEGREE + 1], float begin, float end, float error_tolerance) {
+	// We iterate over derivatives of different order. At the start of each
+	// iteration, this array holds (possibly empty) intervals where the current
+	// derivative is monotonic. Depending on the current degree, some entries
+	// at the start will be irrelevant.
+	float intervals[MAX_DEGREE + 2];
+	// unroll
+	for (uniform int i = 0; i != MAX_DEGREE + 1; ++i)
+		intervals[i] = begin;
+	intervals[MAX_DEGREE + 1] = end;
+	vec2f quadratic_roots;
+	if (solve_quadratic_derivative(quadratic_roots, poly)) {
+		intervals[MAX_DEGREE - 1] = clamp(min(quadratic_roots.x, quadratic_roots.y), begin, end);
+		intervals[MAX_DEGREE - 0] = clamp(max(quadratic_roots.x, quadratic_roots.y), begin, end);
+	}
+
+    // Maps an index to its factorial. For larger inputs, the factorial does not
+    // fit into an integer.
+	const static uniform int uniform factorial[] = {
+	1, 1, 2, 6, 24, 120, 720, 5040, 40320, 362880, 3628800, 39916800, 479001600};
+	// unroll
+	for (uniform int degree = 3; degree != MAX_DEGREE + 1; ++degree) {
+		int order = MAX_DEGREE - degree;
+		// Compute coefficients of the current derivative
+		float derivative[MAX_DEGREE + 1];
+		// unroll
+		for (uniform int i = 0; i != MAX_DEGREE + 1; ++i)
+			derivative[i] = (i <= degree) ? (factorial[i + order] / factorial[i]) * poly[i + order] : 0.0f;
+		// Iterate over the current intervals
+		float begin_value = evaluate_polynomial(intervals[1], derivative);
+		// unroll
+		for (uniform int i = 1; i != MAX_DEGREE + 1; ++i) {
+			if (intervals[i] < intervals[i + 1]) {
+				float end_value = evaluate_polynomial(intervals[i + 1], derivative);
+				if (begin_value * end_value <= 0.0f)
+					intervals[i] = clamp(newton_bisection(derivative, intervals[i], intervals[i + 1], begin_value, error_tolerance), begin, end);
+				else
+					// Produce an empty interval, which will be skipped
+					intervals[i] = intervals[i - 1];
+				begin_value = end_value;
+			}
+			else
+				// Produce an empty interval, which will be skipped
+				intervals[i] = intervals[i - 1];
+		}
+	}
+	// Now extract the roots
+	// unroll
+	for (uniform int i = 1; i != MAX_DEGREE + 1; ++i)
+		out_roots[i - 1] = (intervals[i - 1] < intervals[i] && intervals[i] < end) ? intervals[i] : sqrt(-1.0f);
+}

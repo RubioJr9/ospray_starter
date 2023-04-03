@@ -1,0 +1,159 @@
+// Applies a rotation around the positive z-axis to the given vector of values
+// from the SH basis using a linear mapping.
+// \param out_shs The result of evaluate_sh_4() for an input vector to which
+//		the specified rotation has been applied.
+// \param shs Output of evalaute_sh_4() (or a linear combination thereof).
+// \param angle Right-handed rotation angle for the positive z-axis.
+void rotate_sh_4_z(float out_shs[15], float angle) {
+	float shs[15];
+	for (uniform int i = 0; i < 15; ++i)
+		shs[i] = out_shs[i];
+	// Prepare relevant complex unit numbers for the rotation
+	float cosines[5];
+	float sines[5];
+	cosines[0] = 1.0f;
+	sines[0] = 0.0f;
+	cosines[1] = cos(angle);
+	sines[1] = sin(angle);
+	// [[ unroll]]
+	for (uniform int i = 2; i != 5; ++i) {
+		cosines[i] = cosines[1] * cosines[i - 1] - sines[1] * sines[i - 1];
+		sines[i] = cosines[1] * sines[i - 1] + sines[1] * cosines[i - 1];
+	}
+	// We just have to rotate pairs of basis functions that use the same
+	// Legendre polynomial. The rotation depends on the originally used
+	// degree of the sine/cosine and is applied using the angle sum identity:
+	// sin(a+b) =  sin(a)*cos(b) + cos(a)*sin(b)
+	// cos(a+b) = -sin(a)*sin(b) + cos(a)*cos(b)
+	// [[ unroll]]
+	for (uniform int l = 0; l < 5; l += 2) {
+		const int ms[] = { 0, 3, 10};
+		int m_0 = ms[l / 2];
+		out_shs[m_0] = shs[m_0];
+		// [[ unroll]]
+		for (uniform int m = 0; m != l + 1; ++m) {
+			float sine = (m % 2 == 0) ? sines[m] : -sines[m];
+			out_shs[m_0 + m] = shs[m_0 + m] * cosines[m] + shs[m_0 - m] * sine;
+			out_shs[m_0 - m] = -shs[m_0 + m] * sine + shs[m_0 - m] * cosines[m];
+		}
+	}
+}
+
+
+// Like rotate_sh_4_z() but for a rotation around the positive y-axis.
+void rotate_sh_4_y(float out_shs[15], float angle) {
+	float shs[15];
+	for (uniform int i = 0; i < 15; ++i)
+		shs[i] = out_shs[i];
+	// To be consistent with the specification of this function, we have to
+	// revert the angle
+	angle = -angle;
+	// Prepare relevant complex unit numbers for the rotation
+	float cosines[5];
+	float sines[5];
+	cosines[0] = 1.0f;
+	sines[0] = 0.0f;
+	cosines[1] = cos(angle);
+	sines[1] = sin(angle);
+	for (uniform int i = 2; i != 5; ++i) {
+		cosines[i] = cosines[1] * cosines[i - 1] - sines[1] * sines[i - 1];
+		sines[i] = cosines[1] * sines[i - 1] + sines[1] * cosines[i - 1];
+	}
+	// Define block matrices for the rotation. These formulas are taken directly
+	// from Appendix A of "GPU-based ray-casting of spherical functions applied
+	// to high angular resolution diffusion imaging" by Almsick et al., IEEE
+	// TVCG 17:5, 2011
+	float block_2[5][5];
+	// [[ unroll]]
+	for (uniform int i = 0; i != 5; ++i)
+		// [[ unroll]]
+		for (uniform int j = 0; j != 5; ++j)
+			block_2[i][j] = 0.0f;
+	block_2[0][0] = 0.25f * cosines[2] + 0.75f;
+	block_2[0][1] = -sines[1] * cosines[1];
+	block_2[0][2] = (sqrt(3.0f) * 0.5f) * sines[1] * sines[1];
+	block_2[1][0] = -block_2[0][1];
+	block_2[1][1] = cosines[2];
+	block_2[1][2] = -sqrt(3.0f) * cosines[1] * sines[1];
+	block_2[2][0] = block_2[0][2];
+	block_2[2][1] = -block_2[1][2];
+	block_2[2][2] = 0.75f * cosines[2] + 0.25f;
+	block_2[3][3] = block_2[4][4] = cosines[1];
+	block_2[3][4] = -sines[1];
+	block_2[4][3] = -block_2[3][4];
+
+	float block_4[9][9];
+	// [[ unroll]]
+	for (uniform int i = 0; i != 9; ++i)
+		// [[ unroll]]
+		for (uniform int j = 0; j != 9; ++j)
+			block_4[i][j] = 0.0f;
+	block_4[0][0] = (1.0f / 64.0f) * (35.0f + 28.0f * cosines[2] + cosines[4]);
+	block_4[0][1] = (-sqrt(0.5f) / 16.0f) * (14.0f * sines[2] + sines[4]);
+	block_4[0][2] = sqrt(7.0f) / 8.0f * (3.0f + cosines[2]) * sines[1] * sines[1];
+	block_4[0][3] = -0.5f * sqrt(3.5f) * cosines[1] * sines[1] * sines[1] * sines[1];
+	block_4[0][4] = sqrt(35.0f) / 8.0f * sines[1] * sines[1] * sines[1] * sines[1];
+
+	block_4[1][0] = -block_4[0][1];
+	block_4[1][1] = 0.875f * cosines[2] + 0.125f * cosines[4];
+	block_4[1][2] = -sqrt(3.5f) * cosines[1] * cosines[1] * cosines[1] * sines[1];
+	block_4[1][3] = 0.25f * sqrt(7.0f) * (1.0f + 2.0f * cosines[2]) * sines[1] * sines[1];
+	block_4[1][4] = -0.5f * sqrt(17.5f) * cosines[1] * sines[1] * sines[1] * sines[1];
+
+	block_4[2][0] = block_4[0][2];
+	block_4[2][1] = -block_4[1][2];
+	block_4[2][2] = 0.0625f * (5.0f + 4.0f * cosines[2] + 7.0f * cosines[4]);
+	block_4[2][3] = 0.125f * sqrt(0.5f) * (2.0f * sines[2] - 7.0f * sines[4]);
+	block_4[2][4] = 0.125f * sqrt(5.0f) * (5.0f + 7.0f * cosines[2]) * sines[1] * sines[1];
+
+	block_4[3][0] = -block_4[0][3];
+	block_4[3][1] = block_4[1][3];
+	block_4[3][2] = -block_4[2][3];
+	block_4[3][3] = 0.125f * (cosines[2] + 7.0f * cosines[4]);
+	block_4[3][4] = -0.0625f * sqrt(2.5f) * (2.0f * sines[2] + 7.0f * sines[4]);
+
+	block_4[4][0] = block_4[0][4];
+	block_4[4][1] = -block_4[1][4];
+	block_4[4][2] = block_4[2][4];
+	block_4[4][3] = -block_4[3][4];
+	block_4[4][4] = (1.0f / 64.0f) * (9.0f + 20.0f * cosines[2] + 35.0f * cosines[4]);
+
+	block_4[5][5] = 0.0625f * (9.0f * cosines[1] + 7.0f * cosines[3]);
+	block_4[5][6] = -0.125f * sqrt(0.5f) * (3.0f * sines[1] + 7.0f * sines[3]);
+	block_4[5][7] = 0.75f * sqrt(7.0f) * cosines[1] * sines[1] * sines[1];
+	block_4[5][8] = -0.5f * sqrt(3.5f) * sines[1] * sines[1] * sines[1];
+
+	block_4[6][5] = -block_4[5][6];
+	block_4[6][6] = 0.125f * (cosines[1] + 7.0f * cosines[3]);
+	block_4[6][7] = 0.125f * sqrt(3.5f) * (sines[1] - 3.0f * sines[3]);
+	block_4[6][8] = 0.5f * sqrt(7.0f) * cosines[1] * sines[1] * sines[1];
+
+	block_4[7][5] = block_4[5][7];
+	block_4[7][6] = -block_4[6][7];
+	block_4[7][7] = 0.0625f * (7.0f * cosines[1] + 9.0f * cosines[3]);
+	block_4[7][8] = -0.125f * sqrt(0.5f) * (7.0f * sines[1] + 3.0f * sines[3]);
+
+	block_4[8][5] = -block_4[5][8];
+	block_4[8][6] = block_4[6][8];
+	block_4[8][7] = -block_4[7][8];
+	block_4[8][8] = 0.875f * cosines[1] + 0.125f * cosines[3];
+
+	// Apply the rotation block by block
+	out_shs[0] = shs[0];
+	// [[ unroll]]
+	for (uniform int i = 0; i != 5; ++i) {
+		out_shs[1 + i] = 0.0f;
+		// [[ unroll]]
+		for (uniform int j = 0; j != 5; ++j) {
+			out_shs[1 + i] += block_2[i][j] * shs[1 + j];
+		}
+	}
+	// [[ unroll]]
+	for (uniform int i = 0; i != 9; ++i) {
+		out_shs[6 + i] = 0.0f;
+		// [[ unroll]]
+		for (uniform int j = 0; j != 9; ++j) {
+			out_shs[6 + i] += block_4[i][j] * shs[6 + j];
+		}
+	}
+}

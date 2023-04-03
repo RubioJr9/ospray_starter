@@ -26,6 +26,6 @@ namespace tensor_geometry {
         Ref<const DataT<float>> boundRadiusData;
         Ref<const DataT<float>> coefficientData;
         Ref<const DataT<float>> rotatedCoefficientData;
-        uint32 degreeL{0};
+        SHRenderMethod shRenderMethod{SHRenderMethod::NewtonBisection};
     };
 }}
