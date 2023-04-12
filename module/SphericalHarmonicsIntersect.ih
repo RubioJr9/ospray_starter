@@ -7,6 +7,7 @@
 #include "math/AffineSpace.ih"
 #include "camera/PerspectiveCameraShared.h"
 #include "sh.ih"
+#include "complex_algebra.ih"
 #include "bracketed_newton_bisection.ih"
 
 #define NO_INTERSECTION 3.4e+38f
@@ -66,10 +67,9 @@ void get_planar_sh_polynomial_4(float out_poly[5], const uniform float * uniform
 	// is rather arbitrary but is reasonable in terms of numerical accuracy and
 	// gives correct results even without a homogenized SH basis.
 	float poly_values[5];
-	// [[unroll]]
 	for (uniform int i = 0; i != 5; ++i) {
-		float x = cos(i * 3.141592653589793f * 0.2f);
-		float y = sin(i * 3.141592653589793f * 0.2f);
+		uniform float x = cos(i * 3.141592653589793f * 0.2f);
+		uniform float y = sin(i * 3.141592653589793f * 0.2f);
 		vec3f point = x * x_axis + y * y_axis;
 		float shs[15];
 		evaluate_sh_4(shs, point);
@@ -78,17 +78,15 @@ void get_planar_sh_polynomial_4(float out_poly[5], const uniform float * uniform
 			poly_values[i] += sh_coeffs[j] * shs[j];
 	}
 	// Construct the polynomial coefficients
-	float inv_vander[5][5] = {
+	const static uniform float inv_vander[5][5] = {
 		{  0.2f, -0.247213595f,  0.647213595f,  0.647213595f, -0.247213595f },
 		{  0.0f, -0.179611191f,  1.99191863f,  -1.99191863f,   0.179611191f },
 		{ -2.0f,  2.34164079f,  -0.341640786f, -0.341640786f,  2.34164079f  },
 		{  0.0f,  1.70130162f,  -1.05146222f,   1.05146222f,  -1.70130162f  },
 		{  1.0f, 0.0f, 0.0f, 0.0f, 0.0f },
 	};
-	// [[unroll]]
 	for (uniform int i = 0; i != 5; ++i) {
 		out_poly[i] = 0.0f;
-		// [[unroll]]
 		for (uniform int j = 0; j != 5; ++j)
 			out_poly[i] += inv_vander[i][j] * poly_values[j];
 	}
@@ -135,9 +133,7 @@ void get_sh_glyph_intersections_segment(float out_ray_roots[10], const uniform f
 	float sh_poly_bound = abs(sh_poly[0]) + abs(sh_poly[4]) + 0.325f * (abs(sh_poly[1]) + abs(sh_poly[3])) + 0.25f * abs(sh_poly[2]);
 	// Square this polynomial and multiply by y^2 (i.e. append two zeros)
 	float poly[11] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-	// [[unroll]]
 	for (uniform int i = 0; i != 5; ++i)
-		// [[unroll]]
 		for (uniform int j = 0; j != 5; ++j)
 			poly[i + j] += sh_poly[i] * sh_poly[j];
 	// Subtract closest_dist_sq * (x^2+y^2)^5 (which can be computed using the
@@ -152,7 +148,6 @@ void get_sh_glyph_intersections_segment(float out_ray_roots[10], const uniform f
 	float root_bound_sq = sh_poly_bound * (sh_poly_bound / frame.closest_dist_sq) - 1.0f;
 	if (root_bound_sq < 0.0f) {
 		// There are no intersections
-		// [[unroll]]
 		for (uniform int i = 0; i != 10; ++i)
 			out_ray_roots[i] = NO_INTERSECTION;
 		return;
@@ -170,7 +165,6 @@ void get_sh_glyph_intersections_segment(float out_ray_roots[10], const uniform f
 	// Transform back to ray coordinates. We could have worked in global
 	// coordinates directly but this approach ought to be more stable.
 	float closest_dist = 1.0f / inv_closest_dist;
-	// [[unroll]]
 	for (uniform int i = 0; i != 10; ++i)
 		out_ray_roots[i] = isnan(roots[i]) ? NO_INTERSECTION : (roots[i] * closest_dist - frame.ray_dot_offset);
 	// Sort the roots
@@ -197,7 +191,6 @@ vec3f get_sh_glyph_normal(const uniform float * uniform sh_coeffs, vec3f offset)
 	evaluate_sh_4_grad(shs, grads, offset);
 	float poly_value = 0.0f;
 	vec3f poly_grad = make_vec3f(0.0f);
-	// [[unroll]]
 	for (uniform int i = 0; i != 15; ++i) {
 		poly_value += sh_coeffs[i] * shs[i];
 		poly_grad = poly_grad + sh_coeffs[i] * grads[i];
@@ -215,4 +208,100 @@ inline void intersectSphericalHarmonicsNewtonBisection(float out_ray_roots[10],
     varying SHIntersections* uniform hitData)
 {
   get_sh_glyph_intersections(out_ray_roots, coeffs, center, rayOrg, rayDir);
+}
+
+// Constructs a homogeneous quartic polynomial describing the behavior of a
+// linear combination of SH basis functions in bands 0, 2, 4 in a plane spanned
+// by two given vectors. For the sake of improved numerical stability, the
+// polynomial is constructed in a Moebius-transformed domain.
+// \param out_poly Complex polynomial coefficients for w^4, w^3*z, w^2*z^2 in
+//		this order where z=x+iy and w=x-iy (i is the imaginary unit). The
+//		coefficients for w*z^3 and z^4 are conjc(out_poly[1]) and
+//		conjc(out_poly[0]) respectively.
+// \param sh_coeffs Spherical harmonics coefficients for bands 0, 2 and 4. See
+//		evaluate_sh_4() for their order.
+// \param x_axis The x-axis of the coordinate frame.
+// \param y_axis The y-axis of the coordinate frame.
+void get_planar_sh_polynomial_4_complex(vec2f out_poly[3], const uniform float* uniform sh_coeffs, const vec3f x_axis, const vec3f y_axis) {
+	// Evaluate at equiangular points in the arc from (x,y)=(1,0) to (-1,0)
+	/* float pi = 3.141592653589793f; */
+	float xs[5] = { cos(0.0f * PI), cos(0.2f * PI), cos(0.4f * PI), cos(0.6f * PI), cos(0.8f * PI) };
+	float ys[5] = { sin(0.0f * PI), sin(0.2f * PI), sin(0.4f * PI), sin(0.6f * PI), sin(0.8f * PI) };
+	float poly_values[5];
+	for (uniform int i = 0; i != 5; ++i) {
+		vec3f point = xs[i] * x_axis + ys[i] * y_axis;
+		float shs[15];
+		evaluate_sh_4(shs, point);
+		poly_values[i] = 0.0f;
+		for (uniform int j = 0; j != 15; ++j)
+			poly_values[i] += sh_coeffs[j] * shs[j];
+	}
+	// Compute the polynomial coefficients using half a discrete Fourier
+	// transform
+	for (uniform int i = 0; i != 3; ++i) {
+		out_poly[i] = make_vec2f(0.0f);
+		for (uniform int j = 0; j != 5; ++j) {
+			float angle = 0.4f * PI * (j * (2.0 - i));
+			out_poly[i] = out_poly[i] + 0.2f * poly_values[j] * make_vec2f(cos(angle), sin(angle));
+		}
+	}
+}
+
+// A variant of get_sh_glyph_intersections(), which ends up finding roots on
+// the complex unit circle.
+void get_sh_glyph_intersections_complex(float out_ray_roots[10], const uniform float* uniform sh_coeffs, const uniform vec3f glyph_center, const vec3f ray_origin, const vec3f ray_dir) {
+	// Get a polynomial for the SH polynomial in the relevant plane
+	orthogonal_frame_t frame = get_orthonormal_frame(glyph_center, ray_origin, ray_dir);
+	vec2f sh_poly[3];
+	get_planar_sh_polynomial_4_complex(sh_poly, sh_coeffs, frame.ray_dir, frame.closest_dir);
+	// Square this polynomial
+	vec2f sh_square[5] = { make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f) };
+	for (uniform int i = 0; i != 5; ++i)
+		for (uniform int j = max(0, i - 4); j != min(4, i) + 1; ++j)
+			sh_square[i] = sh_square[i] + mulc(((j <= 2) ? sh_poly[j] : conjc(sh_poly[4 - j])), ((i - j <= 2) ? sh_poly[i - j] : conjc(sh_poly[4 - (i - j)])));
+	// Increase the degree of the polynomial from 8 to 10 by multiplying by
+	// y^2 because that is constant along the ray. The polynomial y^2 equals
+	// (-0.25 * w^2 + 0.5 * z * w - 0.25 * z^2).
+	vec2f poly[6];
+	for (uniform int i = 0; i != 5; ++i)
+		poly[i] = -0.25f * sh_square[i];
+	poly[5] = -0.25f * conjc(sh_square[3]);
+	for (uniform int i = 0; i != 5; ++i)
+		poly[i+1] = poly[i+1] + 0.5f * sh_square[i];
+	for (uniform int i = 0; i != 4; ++i)
+		poly[i+2] = poly[i+2] - 0.25f * sh_square[i];
+	poly[5].y = 0.0f;
+	// Subtract (x^2+y^2)^5 = (z*w)^5 = z^5 * w^5, scaled by
+	// closest distance squared
+	poly[5].x -= frame.closest_dist_sq;
+	// For the first two iterations, we would like to find roots near 1 because
+	// in the original domain, those correspond to the foremost and hindmost
+	// roots and it improves stability in a boundary case. Afterwards, we start
+	// at zero to favor convergence to the smallest remaining root.
+	vec2f initializations[10] = {
+		make_vec2f(1.0f, 0.0f), make_vec2f(1.0f, 0.0f), make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f),
+		make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f), make_vec2f(0.0f)
+	};
+	// Compute the roots in the transformed local coordinate frame. The root
+	// computation method expects to get all coefficients explicitly.
+	vec2f full_poly[11] = {
+		poly[0], poly[1], poly[2], poly[3], poly[4], poly[5],
+		conjc(poly[4]), conjc(poly[3]), conjc(poly[2]), conjc(poly[1]), conjc(poly[0]),
+	};
+	vec2f circle_roots[10];
+	compute_roots(circle_roots, full_poly, initializations);
+	float closest_dist = sqrt(frame.closest_dist_sq);
+	for (uniform int i = 0; i != 10; ++i) {
+		// Revert the Moebius transform (the second line multiplies by i)
+		vec2f root = divc(circle_roots[i] + make_vec2f(1.0, 0.0), circle_roots[i] - make_vec2f(1.0f, 0.0f));
+		root = make_vec2f(-root.y, root.x);
+		// Transform back to ray coordinates. We could have worked in global
+		// coordinates directly but this approach ought to be more stable.
+		float ray_root = root.x * closest_dist - frame.ray_dot_offset;
+		// Mark complex roots
+		float norm_sq = (circle_roots[i].x*circle_roots[i].x + circle_roots[i].y*circle_roots[i].y);
+		out_ray_roots[i] = (abs(norm_sq - 1.0f) < 1.0e-4f) ? ray_root : NO_INTERSECTION;
+	}
+	// Sort the roots
+	sort_10(out_ray_roots);
 }

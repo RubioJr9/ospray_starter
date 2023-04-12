@@ -269,6 +269,243 @@ void evaluate_sh_4_hess(float out_shs[15], vec3f out_grads[15], float out_hess[1
 	out_hess[14][ZZ] = 0.0f;
 }
 
+void evaluate_sh_4_hess(uniform float out_shs[15], uniform float out_grads[15][3], uniform float out_hess[15][6], const uniform float point[3]) {
+	const uniform float x = point[0];
+	const uniform float y = point[1];
+	const uniform float z = point[2];
+	// For homogenization, we express the associated Legendre polynomials as
+	// homogeneous polynomials of the variables z and r = sqrt(x^2 + y^2)
+	const uniform float z_2 = z * z;
+	const uniform float r_2 = x * x + y * y;
+	// Evaluate the relevant associated Legendre polynomials. At such low degree,
+	// the recurrent scheme is not worthwhile. We skip odd bands and constant or
+	// linear polynomials.
+	const uniform float legendre_4_0 = z_2 * (z_2 - 3.0f * r_2) + 3.0f / 8.0f * r_2 * r_2;
+	const uniform float scaled_legendre_4_1 = 2.67618617422915667f * z * (-z_2 + 0.75f * r_2);
+	const uniform float scaled_legendre_4_2 = 2.83852408727268005f * (z_2 - (1.0f / 6.0f) * r_2);
+	// Evaluate the Fourier basis. Again, we omit constant and linear terms.
+	const uniform float cosine_2 = r_2 - 2.0f * y * y;
+	const uniform float sine_2 = 2.0f * x * y;
+	const uniform float cosine_3 = x * cosine_2 - y * sine_2;
+	const uniform float sine_3 = x * sine_2 + y * cosine_2;
+	const uniform float cosine_4 = x * cosine_3 - y * sine_3;
+	const uniform float sine_4 = x * sine_3 + y * cosine_3;
+	// Assemble the Legendre polynomials and the Fourier basis with appropriate
+	// constant factors and homogenize to degree 4 by multiplying one_2 as needed
+	uniform float one_2 = r_2 + z_2;
+	out_shs[0] = 0.282094791773878143f * one_2 * one_2;
+	out_shs[1] = 0.546274215296039535f * one_2 * cosine_2;
+	out_shs[2] = 1.09254843059207907f * one_2 * x * z;
+	out_shs[3] = 0.630783130505040012f * one_2 * (z_2 - 0.5f * r_2);
+	out_shs[4] = -1.09254843059207907f * one_2 * y * z;
+	out_shs[5] = 0.546274215296039535f * one_2 * sine_2;
+	out_shs[6] = 0.625835735449176135f * cosine_4;
+	out_shs[7] = 1.77013076977993053f * cosine_3 * z;
+	out_shs[8] = cosine_2 * scaled_legendre_4_2;
+	out_shs[9] = -x * scaled_legendre_4_1;
+	out_shs[10] = 0.846284375321634430f * legendre_4_0;
+	out_shs[11] = y * scaled_legendre_4_1;
+	out_shs[12] = sine_2 * scaled_legendre_4_2;
+	out_shs[13] = -1.77013076977993053f * sine_3 * z;
+	out_shs[14] = 0.625835735449176135f * sine_4;
+	if (!out_grads)
+		return;
+	// Prepare a few common subexpressions. Many of them are linear in
+	// x^2, y^2, z^2 and named by the corresponding factors. a, b, c are
+	// various literals, m is -1.
+	const uniform float xa3_ya1_za1 = 1.09254843059207907f * (one_2 + 2.0f * x * x);
+	const uniform float xa1_ya3_za1 = 1.09254843059207907f * (one_2 + 2.0f * y * y);
+	const uniform float xa1_ya1_za3 = 1.09254843059207907f * (one_2 + 2.0f * z_2);
+	const uniform float xb1_yb1_zb1 = 1.128379167095512574f * one_2;
+	const uniform float xc2_yc2_zcm1 = -1.26156626101008002f * (r_2 - 0.5f * z_2);
+	const uniform float x1_y1_zm4 = r_2 - 4.0f * z_2;
+	const uniform float xyz = x * y * z;
+	const uniform float cosine_2_z = cosine_2 * z;
+	// Assemble the pieces to get the gradients. This is mostly just using
+	// the product rule but there is a lot of manual optimization on top of
+	// that. The gradient should be homogeneous of degree 3.
+	out_grads[0][0] = xb1_yb1_zb1 * x;
+	out_grads[0][1] = xb1_yb1_zb1 * y;
+	out_grads[0][2] = xb1_yb1_zb1 * z;
+
+	out_grads[1][0] = 1.09254843059207907f * x * (cosine_2 + one_2);
+	out_grads[1][1] = 1.09254843059207907f * y * (cosine_2 - one_2);
+	out_grads[1][2] = 1.09254843059207907f * z * cosine_2;
+
+	out_grads[2][0] = z * xa3_ya1_za1;
+	out_grads[2][1] = 2.18509686118415814f * xyz;
+	out_grads[2][2] = x * xa1_ya1_za3;
+
+	out_grads[3][0] = x * xc2_yc2_zcm1;
+	out_grads[3][1] = y * xc2_yc2_zcm1;
+	out_grads[3][2] = 0.630783130505040012f * z * (r_2 + 4.0f * z_2);
+
+	out_grads[4][0] = -out_grads[2][1];
+	out_grads[4][1] = -z * xa1_ya3_za1;
+	out_grads[4][2] = -y * xa1_ya1_za3;
+
+	out_grads[5][0] = y * xa3_ya1_za1;
+	out_grads[5][1] = x * xa1_ya3_za1;
+	out_grads[5][2] = out_grads[2][1];
+
+	out_grads[6][0] = 2.50334294179670454f * cosine_3;
+	out_grads[6][1] = -2.50334294179670454f * sine_3;
+	out_grads[6][2] = 0.0f;
+
+	out_grads[7][0] = 5.31039230933979159f * cosine_2_z;
+	out_grads[7][1] = -10.6207846186795827f * xyz;
+	out_grads[7][2] = 1.77013076977993053f * cosine_3;
+
+	out_grads[8][0] = 5.677048174545360109f * x * (z_2 - (1.0f / 3.0f) * x*x);
+	out_grads[8][1] = -5.677048174545360109f * y * (z_2 - (1.0f / 3.0f) * y*y);
+	out_grads[8][2] = 5.677048174545360109f * cosine_2_z;
+
+	out_grads[9][0] = -1.837117307087383575f * z * (xa3_ya1_za1 - 2.549279671381517831f * z_2);
+	out_grads[9][1] = -4.014279261343735008f * xyz;
+	out_grads[9][2] = -2.007139630671867504f * x1_y1_zm4 * x;
+
+	out_grads[10][0] = 1.269426562982451646f * x1_y1_zm4 * x;
+	out_grads[10][1] = 1.269426562982451646f * x1_y1_zm4 * y;
+	out_grads[10][2] = -5.077706251929806583f * z * (r_2 - (2.0f / 3.0f) * z_2);
+
+	out_grads[11][0] = -out_grads[9][1];
+	out_grads[11][1] = 1.837117307087383575f * z * (xa1_ya3_za1 - 2.549279671381517831f * z_2);
+	out_grads[11][2] = 2.007139630671867504f * x1_y1_zm4 * y;
+
+	out_grads[12][0] = 0.8660254037844386468f * y * (-xa3_ya1_za1 + 7.64783901414455349f * z_2);
+	out_grads[12][1] = 0.8660254037844386468f * x * (-xa1_ya3_za1 + 7.64783901414455349f * z_2);
+	out_grads[12][2] = 11.35409634909072096f * xyz;
+
+	out_grads[13][0] = out_grads[7][1];
+	out_grads[13][1] = -out_grads[7][0];
+	out_grads[13][2] = -1.77013076977993053f * sine_3;
+
+	out_grads[14][0] = -out_grads[6][1];
+	out_grads[14][1] = out_grads[6][0];
+	out_grads[14][2] = 0.0f;
+
+	if (!out_hess)
+		return;
+	// Convenience constants for the index mapping of the Hessian
+	const uniform int XX = 0;
+	const uniform int XY = 1;
+	const uniform int XZ = 2;
+	const uniform int YY = 3;
+	const uniform int YZ = 4;
+	const uniform int ZZ = 5;
+	// Prepare a few common subexpressions
+	const uniform float xy = x * y;
+	const uniform float x_2 = x * x;
+	const uniform float xz = x * z;
+	const uniform float y_2 = y * y;
+	const uniform float yz = y * z;
+	// Once again, we apply the product rule to the formulas for the
+	// gradient. The Hessian should be homogeneous of degree 2.
+	out_hess[0][XX] = 1.03279555898864450f * xa3_ya1_za1;
+	out_hess[0][XY] = 2.25675833419102515f * xy;
+	out_hess[0][XZ] = 2.25675833419102515f * xz;
+	out_hess[0][YY] = 1.03279555898864450f * xa1_ya3_za1;
+	out_hess[0][YZ] = 2.25675833419102515f * yz;
+	out_hess[0][ZZ] = 1.03279555898864450f * xa1_ya1_za3;
+
+	out_hess[1][XX] = 1.09254843059207907f * (6.0f * x_2 + z_2);
+	out_hess[1][XY] = 0.0f;
+	out_hess[1][XZ] = 2.18509686118415814f * xz;
+	out_hess[1][YY] = -out_hess[1][XX] + 6.555290583552474423f * cosine_2;
+	out_hess[1][YZ] = -2.18509686118415814f * yz;
+	out_hess[1][ZZ] = 1.09254843059207907f * cosine_2;
+
+	out_hess[2][XX] = 6.555290583552474423f * xz;
+	out_hess[2][XY] = -out_hess[1][YZ];
+	out_hess[2][XZ] = xa3_ya1_za1 + 2.18509686118415814f * z_2;
+	out_hess[2][YY] = out_hess[1][XZ];
+	out_hess[2][YZ] = 2.18509686118415814f * xy;
+	out_hess[2][ZZ] = out_hess[2][XX];
+
+	out_hess[3][XX] = xc2_yc2_zcm1 - 2.523132522020160048f * x_2;
+	out_hess[3][XY] = -2.523132522020160048f * xy;
+	out_hess[3][XZ] = 1.26156626101008002f * xz;
+	out_hess[3][YY] = xc2_yc2_zcm1 - 2.523132522020160048f * y_2;
+	out_hess[3][YZ] = 1.26156626101008002f * yz;
+	out_hess[3][ZZ] = 0.630783130505040012f * (r_2 + 12.0f * z_2);
+
+	out_hess[4][XX] = out_hess[1][YZ];
+	out_hess[4][XY] = -out_hess[1][XZ];
+	out_hess[4][XZ] = -out_hess[2][YZ];
+	out_hess[4][YY] = -6.55529058355247442f * yz;
+	out_hess[4][YZ] = -xa1_ya3_za1 - 2.18509686118415814f * z_2;
+	out_hess[4][ZZ] = out_hess[4][YY];
+
+	out_hess[5][XX] = 6.55529058355247442f * xy;
+	out_hess[5][XY] = 3.27764529177623721f * (r_2 + (1.0f / 3.0f) * z_2);
+	out_hess[5][XZ] = -out_hess[1][YZ];
+	out_hess[5][YY] = out_hess[5][XX];
+	out_hess[5][YZ] = out_hess[1][XZ];
+	out_hess[5][ZZ] = out_hess[2][YZ];
+
+	out_hess[6][XX] = 7.51002882539011362f * cosine_2;
+	out_hess[6][XY] = -15.0200576507802272f * xy;
+	out_hess[6][XZ] = 0.0f;
+	out_hess[6][YY] = -out_hess[6][XX];
+	out_hess[6][YZ] = 0.0f;
+	out_hess[6][ZZ] = 0.0f;
+
+	out_hess[7][XX] = 10.6207846186795827f * xz;
+	out_hess[7][XY] = -10.6207846186795827f * yz;
+	out_hess[7][XZ] = 5.31039230933979159f * cosine_2;
+	out_hess[7][YY] = -out_hess[7][XX];
+	out_hess[7][YZ] = -10.6207846186795827f * xy;
+	out_hess[7][ZZ] = 0.0f;
+
+	out_hess[8][XX] = -5.677048174545360109f * (x_2 - z_2);
+	out_hess[8][XY] = 0.0f;
+	out_hess[8][XZ] = 11.35409634909072096f * xz;
+	out_hess[8][YY] = 5.677048174545360109f * (y_2 - z_2);
+	out_hess[8][YZ] = -11.35409634909072096f * yz;
+	out_hess[8][ZZ] = 5.677048174545360109f * cosine_2;
+
+	out_hess[9][XX] = -12.04283778403120502f * xz;
+	out_hess[9][XY] = -4.014279261343735008f * yz;
+	out_hess[9][XZ] = -1.837117307087383575f * (xa3_ya1_za1 - 5.462742152960395353f * z_2);
+	out_hess[9][YY] = -4.014279261343735008f * xz;
+	out_hess[9][YZ] = -4.014279261343735008f * xy;
+	out_hess[9][ZZ] = 16.05711704537494003f * xz;
+
+	out_hess[10][XX] = 1.269426562982451646f * (x1_y1_zm4 + 2.0f * x_2);
+	out_hess[10][XY] = 2.538853125964903291f * xy;
+	out_hess[10][XZ] = -10.15541250385961317f * xz;
+	out_hess[10][YY] = 1.269426562982451646f * (x1_y1_zm4 + 2.0f * y_2);
+	out_hess[10][YZ] = -10.15541250385961317f * yz;
+	out_hess[10][ZZ] = -5.077706251929806583f * (r_2 - 2.0f * z_2);
+
+	out_hess[11][XX] = -out_hess[9][XY];
+	out_hess[11][XY] = -out_hess[9][YY];
+	out_hess[11][XZ] = -out_hess[9][YZ];
+	out_hess[11][YY] = 12.04283778403120502f * yz;
+	out_hess[11][YZ] = 1.837117307087383574f * (xa1_ya3_za1 - 5.462742152960395353f * z_2);
+	out_hess[11][ZZ] = -16.05711704537494003f * yz;
+
+	out_hess[12][XX] = -5.677048174545360109f * xy;
+	out_hess[12][XY] = -2.838524087272680054f * (r_2 - 2.0f * z_2);
+	out_hess[12][XZ] = -out_hess[8][YZ];
+	out_hess[12][YY] = out_hess[12][XX];
+	out_hess[12][YZ] = out_hess[8][XZ];
+	out_hess[12][ZZ] = 11.35409634909072096f * xy;
+
+	out_hess[13][XX] = out_hess[7][XY];
+	out_hess[13][XY] = -out_hess[7][XX];
+	out_hess[13][XZ] = out_hess[7][YZ];
+	out_hess[13][YY] = -out_hess[7][XY];
+	out_hess[13][YZ] = -out_hess[7][XZ];
+	out_hess[13][ZZ] = 0.0f;
+
+	out_hess[14][XX] = -out_hess[6][XY];
+	out_hess[14][XY] = out_hess[6][XX];
+	out_hess[14][XZ] = 0.0f;
+	out_hess[14][YY] = -out_hess[14][XX];
+	out_hess[14][YZ] = 0.0f;
+	out_hess[14][ZZ] = 0.0f;
+}
 
 // Like evaluate_sh_4_hess() but only evaluates the functions and their gradient
 void evaluate_sh_4_grad(float out_shs[15], vec3f out_grads[15], vec3f point) {
@@ -277,6 +514,11 @@ void evaluate_sh_4_grad(float out_shs[15], vec3f out_grads[15], vec3f point) {
 	evaluate_sh_4_hess(out_shs, out_grads, hess, point);
 }
 
+// Like evaluate_sh_4() but only evaluates the basis functions themselves and
+// their gradient
+void evaluate_sh_4_grad(uniform float out_shs[15], uniform float out_grads[15][3], const uniform float point[3]) {
+	evaluate_sh_4_hess(out_shs, out_grads, 0, point);
+}
 
 // Like evaluate_sh_4_hess() but only evaluates the functions
 void evaluate_sh_4(float out_shs[15], vec3f point) {
@@ -284,4 +526,9 @@ void evaluate_sh_4(float out_shs[15], vec3f point) {
 	vec3f grads[15];
 	float hess[15][6];
 	evaluate_sh_4_hess(out_shs, grads, hess, point);
+}
+
+// Like evaluate_sh_4() but only evaluates the basis functions themselves
+void evaluate_sh_4(uniform float out_shs[15], const uniform float point[3]) {
+	evaluate_sh_4_hess(out_shs, 0, 0, point);
 }

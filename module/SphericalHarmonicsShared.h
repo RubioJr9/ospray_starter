@@ -6,7 +6,7 @@
 #include "geometry/GeometryShared.h"
 #include "camera/PerspectiveCameraShared.h"
 
-enum SHRenderMethod { NewtonBisection = 0, Laguerre, Wigner };
+enum SHRenderMethod { NewtonBisection = 0, Laguerre, Wigner, Naive };
 
 #ifdef __cplusplus
 namespace ispc {

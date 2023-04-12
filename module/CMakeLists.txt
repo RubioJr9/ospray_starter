@@ -18,6 +18,7 @@ ispc_target_add_sources(ospray_module_tensor_geometry
   superquadric.ispc
   bracketed_newton_bisection.ih
   SphericalHarmonicsIntersect.ih
+  complex_algebra.ih
   sh.ih
   wigner.ih
   SphericalHarmonics.cpp

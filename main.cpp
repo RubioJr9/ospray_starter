@@ -30,7 +30,7 @@ using Eigen::MatrixXd;
 
 #define renderSH 1
 
-enum SHRenderMethod { NewtonBisection = 0, Laguerre, Wigner };
+enum SHRenderMethod { NewtonBisection = 0, Laguerre, Wigner, Naive };
 
 const std::string fullscreen_quad_vs = R"(
 #version 330 core
@@ -599,14 +599,15 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     if (cmdline_file)
         positions = latVolNodes(x,y,z, strides);
     else
-        positions = latVolNodes(1,1,1, strides);
+        positions = latVolNodes(2,1,1, strides);
 
     if (!cmdline_file)
         coeffs = makeRandomCoeffs(positions.size(), 1);
 
     // SHRenderMethod shRenderMethod = SHRenderMethod::NewtonBisection;
     // SHRenderMethod shRenderMethod = SHRenderMethod::Laguerre;
-    SHRenderMethod shRenderMethod = SHRenderMethod::Wigner;
+    // SHRenderMethod shRenderMethod = SHRenderMethod::Wigner;
+    SHRenderMethod shRenderMethod = SHRenderMethod::Naive;
 
     std::vector<glm::vec3> wignerAngles;
     std::vector<float> rotatedCoeffs;

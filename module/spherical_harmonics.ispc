@@ -48,7 +48,6 @@ uniform float sum(uniform float * uniform a, uniform int start, uniform int end)
     return val;
 }
 
-#if 0
 void compute_aabb_newton(uniform float uniform out_aabb[3], const uniform float uniform sh_coeffs[COEFFS_COUNT], uniform int sample_count) {
 	// Prepare a spherical Fibonacci sampling on the upper hemisphere
 	uniform float z_factor = -1.0f / ((float) sample_count);
@@ -148,7 +147,6 @@ void compute_aabb_newton(uniform float uniform out_aabb[3], const uniform float 
 			out_aabb[Z] = abs(point[Z]);
 	}
 }
-#endif
 
 export void SphericalHarmonics_bounds(const RTCBoundsFunctionArguments *uniform args)
 {
@@ -159,7 +157,14 @@ export void SphericalHarmonics_bounds(const RTCBoundsFunctionArguments *uniform 
     uniform float r = get_float(self->boundRadius, primID);
 
     box3fa *uniform out = (box3fa * uniform) args->bounds_o;
-    *out = make_box3fa(center + make_vec3f(-r,-r,-r), center + make_vec3f(r,r,r));
+
+    uniform float uniform out_aabb[3];
+    const uniform float* uniform coeffs = (const uniform float* uniform)(self->coefficients.addr + self->coefficients.byteStride * primID * COEFFS_COUNT);
+    const uniform int sample_count = 100;
+    compute_aabb_newton(out_aabb, coeffs, sample_count);
+    for (uniform int i = 0; i < 3; ++i)
+        out_aabb[i] *= 1.02;
+    *out = make_box3fa(center + make_vec3f(-out_aabb[0],-out_aabb[1],-out_aabb[2]), center + make_vec3f(out_aabb[0],out_aabb[1],out_aabb[2]));
 }
 
 void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
@@ -170,7 +175,6 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
         return;
 
     EmbreeIntersectionContext *uniform ctxt = ((EmbreeIntersectionContext *uniform)args->context);
-    /* varying SHIntersections* uniform hitData = (varying SHIntersections* uniform)ctxt->userPtr; */
     varying SHIntersections* uniform hitData = (varying SHIntersections* uniform)ctxt->userPtr;
 
     SphericalHarmonics *uniform self = (SphericalHarmonics * uniform) args->geometryUserPtr;
@@ -197,8 +201,6 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     isect.entry.t = -inf;
     isect.exit.t = -inf;
     SHRenderMethod shRenderMethod = self->shRenderMethod;
-    /* print("sh ren meth: %\n", (int)shRenderMethod); */
-    /* if (isectBox.entry.hit) { */
         uniform float r = get_float(self->boundRadius, primID);
         float out_ray_roots[10];
     switch (shRenderMethod) {
@@ -206,6 +208,7 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
             intersectSphericalHarmonicsNewtonBisection(out_ray_roots, ray->org, ray->dir, center, coeffs, hitData);
             break;
         case 1: {
+            get_sh_glyph_intersections_complex(out_ray_roots, coeffs, center, ray->org, ray->dir);
             break;
         }
         case 2: {
@@ -213,12 +216,15 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
             get_sh_glyph_intersections_almsick(out_ray_roots, rotatedCoeffs, center, ray->org, ray->dir, false, self->camera);
             break;
         }
+        case 3: {
+            get_sh_glyph_intersections_naive(out_ray_roots, coeffs, center, ray);
+            break;
+        }
     }
             isect.entry.hit = out_ray_roots[0] != NO_INTERSECTION;
             isect.entry.t = out_ray_roots[0];
             if (isect.entry.hit)
                 isect.entry.N = get_sh_glyph_normal(coeffs, ray->org + out_ray_roots[0] * ray->dir - center);
-    /* } */
 
     // call intersection filtering callback and setup hit if accepted
     filterIntersectionBoth(args, isect, isOcclusionTest);

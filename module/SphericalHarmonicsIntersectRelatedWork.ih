@@ -8,7 +8,7 @@
 #define NO_INTERSECTION 3.4e+38f
 
 inline float dot(vec2f a, vec2f b) {
-    return a.x*a.x + b.y*b.y;
+    return a.x*b.x + a.y*b.y;
 }
 
 inline vec2f normalize(vec2f a) {
@@ -64,7 +64,6 @@ void get_bounding_cylinder(float& out_radius, float& out_z, uniform float * unif
 		0.126660f, 0.232690f, 0.335275f, 0.459798f, 0.846284f, 0.459798f, 0.335275f, 0.232690f, 0.126660f,
 	};
 	out_radius = out_z = 0.0f;
-	// [[unroll]]
 	for (uniform int i = 0; i != 15; ++i) {
 		out_radius += radius_max[i] * abs(sh_coeffs[i]);
 		out_z += z_max[i] * abs(sh_coeffs[i]);
@@ -83,7 +82,6 @@ void get_sh_glyph_intersections_almsick(float out_ray_roots[10], const uniform f
 	isect.entry.t = -inf;
 	isect.exit.t = -inf;
 	// The default outcome are no intersections
-	// [[unroll]]
 	for (uniform int i = 0; i != 10; ++i)
 		out_ray_roots[i] = NO_INTERSECTION;
 	// Rotate the SH coefficients suitably
@@ -99,7 +97,6 @@ void get_sh_glyph_intersections_almsick(float out_ray_roots[10], const uniform f
 	vec2f normed_dir_xy = normalize(make_vec2f(dir.x, dir.y));
 	cosines[1] = normed_dir_xy.x;
 	sines[1] = normed_dir_xy.y;
-	// [[unroll]]
 	for (uniform int i = 2; i != 5; ++i) {
 		cosines[i] = cosines[1] * cosines[i - 1] - sines[1] * sines[i - 1];
 		sines[i] = cosines[1] * sines[i - 1] + sines[1] * cosines[i - 1];
@@ -139,7 +136,6 @@ void get_sh_glyph_intersections_almsick(float out_ray_roots[10], const uniform f
 	float z = start;
 	float prev_sdf = 0.0f;
 	int intersection_count = 0;
-	// [[loop]]
 	for (uniform int i = 0; i != step_count; ++i) {
 		float radius = radius_factor * z + radius_summand;
 		// Evaluate a homogeneous polynomial using Horner's method
@@ -162,7 +158,6 @@ void get_sh_glyph_intersections_almsick(float out_ray_roots[10], const uniform f
 			}
 			else {
 				// Avoid sPIlling
-				// [[unroll]]
 				for (uniform int i = 0; i != 10; ++i)
 					if (i == intersection_count)
 						out_ray_roots[i] = t;
@@ -194,10 +189,10 @@ bool get_circle_intersections(float out_intersections[2], vec2f ray_origin, vec2
 // Like get_sh_glyph_intersections() but implements ray marching with
 // evaluation of the full SH basis at each step. Ray marching samples a
 // cylinder centered around the global z-axis.
-void get_sh_glyph_intersections_naive(float out_ray_roots[10], uniform float * uniform sh_coeffs, uniform vec3f glyph_center, vec3f ray_origin, vec3f ray_dir) {
-	ray_origin = ray_origin - glyph_center;
+void get_sh_glyph_intersections_naive(float out_ray_roots[10], const uniform float * uniform sh_coeffs, const uniform vec3f glyph_center, const varying struct Ray *uniform ray) {
+	vec3f ray_origin = ray->org - glyph_center;
+	vec3f ray_dir = ray->dir;
 	// The default outcome are no intersections
-	// [[unroll]]
 	for (uniform int i = 0; i != 10; ++i)
 		out_ray_roots[i] = NO_INTERSECTION;
 	// Find bounds for the ray
@@ -226,7 +221,6 @@ void get_sh_glyph_intersections_naive(float out_ray_roots[10], uniform float * u
 		float shs[15];
 		evaluate_sh_4(shs, point);
 		float poly_value = 0.0f;
-		// [[unroll]]
 		for (uniform int j = 0; j != 15; ++j)
 			poly_value += sh_coeffs[j] * shs[j];
 		// Evaluate the signed distance function and check for an intersection
@@ -235,8 +229,7 @@ void get_sh_glyph_intersections_naive(float out_ray_roots[10], uniform float * u
 		if (prev_sdf * sdf < 0.0f) {
 			// Use regula falsi
 			float intersect_t = t + sdf * ray_step / (prev_sdf - sdf);
-			// Avoid sPIlling
-			// [[unroll]]
+			// Avoid spilling
 			for (uniform int i = 0; i != 10; ++i)
 				if (i == intersection_count)
 					out_ray_roots[i] = intersect_t;
@@ -259,7 +252,6 @@ void get_sh_glyph_intersections_ray_parameter(float out_ray_roots[10], uniform f
 	float root_bound_sq = sh_poly_bound * (sh_poly_bound / frame.closest_dist_sq) - 1.0f;
 	if (root_bound_sq < 0.0f) {
 		// There are no intersections
-		// [[unroll]]
 		for (uniform int i = 0; i != 10; ++i)
 			out_ray_roots[i] = NO_INTERSECTION;
 		return;
@@ -273,9 +265,7 @@ void get_sh_glyph_intersections_ray_parameter(float out_ray_roots[10], uniform f
 	get_planar_sh_polynomial_4(sh_poly, sh_coeffs, ray_dir, ray_origin);
 	// Square this polynomial and multiply by y^2 (i.e. append two zeros)
 	float poly[11] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-	// [[unroll]]
 	for (uniform int i = 0; i != 5; ++i)
-		// [[unroll]]
 		for (uniform int j = 0; j != 5; ++j)
 			poly[i + j] += sh_poly[i] * sh_poly[j];
 	// Subtract ||x*ray_origin + y*ray_dir||^10 (which can be computed using
@@ -314,7 +304,6 @@ void get_sh_glyph_intersections_ray_parameter(float out_ray_roots[10], uniform f
 	// Compute the roots
 	find_real_roots(out_ray_roots, poly, root_bound_min, root_bound_max, 1.0e-3f * (root_bound_max - root_bound_min));
 	// Get rid of NaNs
-	// [[unroll]]
 	for (uniform int i = 0; i != 10; ++i)
 		out_ray_roots[i] = isnan(out_ray_roots[i]) ? NO_INTERSECTION : out_ray_roots[i];
 	sort_10(out_ray_roots);

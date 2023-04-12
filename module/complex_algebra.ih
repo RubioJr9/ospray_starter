@@ -1,0 +1,151 @@
+// Complex conjugate of a complex number (i.e. flipping the sign on the
+// imaginary part)
+vec2f conjc(vec2f value) {
+	return make_vec2f(value.x, -value.y);
+}
+
+// Computes the absolute value of the given complex number
+float absc(vec2f value) {
+	return sqrt(value.x*value.x + value.y*value.y);
+}
+
+// Multiplication of two complex numbers
+vec2f mulc(vec2f lhs, vec2f rhs) {
+	return make_vec2f(lhs.x * rhs.x - lhs.y * rhs.y, lhs.x * rhs.y + lhs.y * rhs.x);
+}
+
+// Multiplication of two complex numbers followed by addition of a third
+// complex number
+vec2f fmac(vec2f a, vec2f b, vec2f c) {
+	return make_vec2f((a.x*b.x + (-a.y*b.y + c.x)), (a.x*b.y + (a.y*b.x + c.y)));
+}
+
+// Division of one complex number by another complex number
+vec2f divc(vec2f numerator, vec2f denominator) {
+	float inv_length_sq = 1.0f / (denominator.x*denominator.x + denominator.y*denominator.y);
+	return mulc(numerator, conjc(denominator)) * inv_length_sq;
+}
+
+
+// Computes the square root of the given complex number
+vec2f sqrtc(vec2f value) {
+	float c = value.x;
+	float d = value.y;
+	float w;
+	if (abs(c) == 0.0f && abs(d) == 0.0f) {
+		w = 0.0f;
+	}
+	else if (abs(c) >= abs(d)) {
+		float dc = d / c;
+		w = abs(c) * 0.5f * (1.0f + sqrt(1.0f + dc * dc));
+	}
+	else if (abs(c) < abs(d)) {
+		float cd = c / d;
+		w = abs(d) * 0.5f * (abs(cd) + sqrt(1.0f + cd * cd));
+	}
+	w = sqrt(w);
+	if (w == 0.0f)
+		return make_vec2f(0.0f);
+	else if (c >= 0.0f)
+		return make_vec2f(w, 0.5f * d / w);
+	else if (d >= 0.0f)
+		return make_vec2f(0.5f * abs(d) / w, w);
+	else
+		return make_vec2f(0.5f * abs(d) / w, -w);
+}
+
+
+// Laguerre's method as used for compute_roots() to converge to a single root
+// of the given polynomial starting with the given initialization.
+vec2f laguerre(vec2f poly[11], uniform int degree, vec2f init) {
+	const uniform int MR = 8;
+	const uniform int MT = 10;
+	const uniform int MAXIT = MT * MR;
+	// Here EPS is the estimated fractional roundoff error. We try to break
+	// (rare) limit cycles with MR different fractional values, once ever MT
+	// steps, for MAXIT total allowed iterations.
+	const uniform float EPS = 1.19209e-7f;
+	// Fractions used to break a limit cycle
+	const uniform float frac[9] = { 0.0f, 0.5f, 0.25f, 0.75f, 0.13f, 0.38f, 0.62f, 0.88f, 1.0f };
+	vec2f x = init;
+	vec2f dx, x1, b, d, f, g, h, sq, gp, gm, g2;
+	// Loop over iterations up to allowed maximum.
+	for (uniform int i = 1; i != MAXIT + 1; ++i) {
+		b = poly[degree];
+		float err = absc(b);
+		d = f = make_vec2f(0.0f);
+		float abx = absc(x);
+		// Efficient computation of the polynomial and its first two
+		// derivatives. f=p''/2, d=p' and b=p where p is the polynomial.
+		for (uniform int j = degree - 1; j != -1; --j) {
+			f = fmac(x, f, d);
+			d = fmac(x, d, b);
+			b = fmac(x, b, poly[j]);
+			err = absc(b) + abx * err;
+		}
+		// Estimate of roundoff error in evaluating the polynomial
+		err *= EPS;
+		// We are on the root
+		if (absc(b) <= err)
+			return x;
+		// The generic case: Use Laguerre's formula.
+		g = divc(d, b);
+		g2 = mulc(g, g);
+		h = g2 - 2.0f * divc(f, b);
+		sq = sqrtc((degree - 1.0) * (degree * h - g2));
+		gp = g + sq;
+		gm = g - sq;
+		float abp = absc(gp);
+		float abm = absc(gm);
+		if (abp < abm)
+			gp = gm;
+		float i_f = i;
+		dx = (max(abp, abm) > 0.0f) ? divc(make_vec2f(degree, 0.0f), gp) : ((1.0f + abx) * make_vec2f(cos(i_f), sin(i_f)));
+		x1 = x - dx;
+		// Converged
+		if (x.x == x1.x && x.y == x1.y)
+			return x;
+		if (i % MT != 0)
+			x = x1;
+		// Every so often we take a fractional step, to break any limit cycle
+		// (itself a rare occurence)
+		else
+			x = x - frac[i / MT] * dx;
+	}
+	// This should not have happened. Return NaN.
+	return make_vec2f(sqrt(-1.0f));
+}
+
+inline vec2f negate(vec2f a) {
+	return make_vec2f(-a.x, -a.y);
+}
+
+// Computes all roots of the given polynomial. The used method is Laguerre's
+// method as described in Chapter 9.5.3 of Numerical Recipes (2007).
+// \param out_roots The real and complex roots of the polynomial in no
+//		particular order repeated according to their multiplicity.
+// \param poly Complex polynomial coefficients starting with the one for x^0.
+void compute_roots(vec2f out_roots[10], vec2f poly[11], vec2f initializations[10]) {
+	// A small number (1 ulp between 1.0f and 2.0f)
+	const uniform float EPS = 1.19209e-7f;
+	uniform int degree = 10;
+	// Loop over each root to be found
+	/* [[unroll]] */
+	for (uniform int j = degree - 1; j != 1; --j) {
+		// Converge from the initialization to a root
+		vec2f x = laguerre(poly, j + 1, initializations[degree - 1 - j]);
+		out_roots[degree - 1 - j] = x;
+		// Divide out a linear factor using forward deflation
+		vec2f b = poly[j + 1];
+		for (uniform int k = j; k != -1; --k) {
+			vec2f c = poly[k];
+			poly[k] = b;
+			b = mulc(x, b) + c;
+		}
+	}
+	// For the last two roots, we simply use the quadratic formula
+	vec2f discriminant = mulc(poly[1], poly[1]) - 4.0f * mulc(poly[0], poly[2]);
+	vec2f root = sqrtc(discriminant);
+	out_roots[8] = divc(negate(poly[1]) + root, 2.0f * poly[2]);
+	out_roots[9] = divc(negate(poly[1]) - root, 2.0f * poly[2]);
+}
