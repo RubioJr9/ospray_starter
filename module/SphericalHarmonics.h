@@ -27,5 +27,6 @@ namespace tensor_geometry {
         Ref<const DataT<float>> coefficientData;
         Ref<const DataT<float>> rotatedCoefficientData;
         SHRenderMethod shRenderMethod{SHRenderMethod::NewtonBisection};
+        bool useCylinder;
     };
 }}

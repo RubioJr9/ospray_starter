@@ -7,6 +7,14 @@
 // Project the point in [-1, 1] screen space onto the arcball sphere
 static glm::quat screen_to_arcball(const glm::vec2 &p);
 
+ArcballCamera::ArcballCamera(const glm::mat4 &mat) {
+    camera = mat;
+    inv_camera = glm::inverse(mat);
+    rotation = glm::quat_cast(mat);
+    // eye = glm::vec3(mat[3][0], mat[3][1], mat[3][2]);
+    // up = glm::vec3(mat[1][0], mat[1][1], mat[1][2]);
+}
+
 ArcballCamera::ArcballCamera(const glm::vec3 &eye,
                              const glm::vec3 &center,
                              const glm::vec3 &up)

@@ -161,10 +161,14 @@ export void SphericalHarmonics_bounds(const RTCBoundsFunctionArguments *uniform 
     uniform float uniform out_aabb[3];
     const uniform float* uniform coeffs = (const uniform float* uniform)(self->coefficients.addr + self->coefficients.byteStride * primID * COEFFS_COUNT);
     const uniform int sample_count = 100;
-    compute_aabb_newton(out_aabb, coeffs, sample_count);
-    for (uniform int i = 0; i < 3; ++i)
-        out_aabb[i] *= 1.02;
-    *out = make_box3fa(center + make_vec3f(-out_aabb[0],-out_aabb[1],-out_aabb[2]), center + make_vec3f(out_aabb[0],out_aabb[1],out_aabb[2]));
+    if (self->useCylinder) {
+        *out = make_box3fa(center - make_vec3f(r), center + make_vec3f(r));
+    } else {
+        compute_aabb_newton(out_aabb, coeffs, sample_count);
+        for (uniform int i = 0; i < 3; ++i)
+            out_aabb[i] *= 1.02;
+        *out = make_box3fa(center + make_vec3f(-out_aabb[0],-out_aabb[1],-out_aabb[2]), center + make_vec3f(out_aabb[0],out_aabb[1],out_aabb[2]));
+    }
 }
 
 void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *uniform args,
@@ -201,7 +205,6 @@ void SphericalHarmonics_intersect_kernel(const RTCIntersectFunctionNArguments *u
     isect.entry.t = -inf;
     isect.exit.t = -inf;
     SHRenderMethod shRenderMethod = self->shRenderMethod;
-        uniform float r = get_float(self->boundRadius, primID);
         float out_ray_roots[10];
     switch (shRenderMethod) {
         case 0:

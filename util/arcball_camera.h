@@ -24,6 +24,8 @@ public:
      */
     ArcballCamera(const glm::vec3 &eye, const glm::vec3 &center, const glm::vec3 &up);
 
+    ArcballCamera(const glm::mat4 &mat);
+
     /* Rotate the camera from the previous mouse position to the current
      * one. Mouse positions should be in normalized device coordinates
      */

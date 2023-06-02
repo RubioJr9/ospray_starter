@@ -36,6 +36,7 @@ namespace tensor_geometry {
         coefficientData = getParamDataT<float>("glyph.coefficients");
         rotatedCoefficientData = getParamDataT<float>("glyph.rotatedCoefficients");
         shRenderMethod = (SHRenderMethod)getParam<uint>("glyph.shRenderMethod");
+        useCylinder = getParam<bool>("glyph.useCylinder");
         auto cam = (PerspectiveCamera*)getParamObject("glyph.camera");
 
         createEmbreeUserGeometry((RTCBoundsFunction)&ispc::SphericalHarmonics_bounds,
@@ -48,6 +49,7 @@ namespace tensor_geometry {
         if (cam) getSh()->camera = cam->getSh();
         getSh()->super.numPrimitives = numPrimitives();
         getSh()->shRenderMethod = shRenderMethod;
+        getSh()->useCylinder = useCylinder;
 
         postCreationInfo();
         ispc::SphericalHarmonics_tests();

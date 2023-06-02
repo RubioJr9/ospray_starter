@@ -20,6 +20,7 @@ struct SphericalHarmonics {
     Data1D boundRadius;
     PerspectiveCamera* camera;
     SHRenderMethod shRenderMethod;
+    bool useCylinder;
 
 #ifdef __cplusplus
   SphericalHarmonics() : shRenderMethod(SHRenderMethod::NewtonBisection) {}

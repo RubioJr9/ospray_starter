@@ -169,7 +169,7 @@ int getSHIndex(bool strides[], int x_dim, int y_dim, int z_dim, int x, int y, in
     return z_stride*y_dim*x_dim*sh_dim + y_stride*x_dim*sh_dim + x_stride*sh_dim + sh;
 }
 
-std::vector<glm::vec3> latVolNodes(int x, int y, int z, bool strides[4])
+std::vector<glm::vec3> latVolNodes(int x, int y, int z, bool strides[4], float geometry_scale)
 {
     const int size = x*y*z;
     std::vector<glm::vec3> positions(size);
@@ -187,7 +187,7 @@ std::vector<glm::vec3> latVolNodes(int x, int y, int z, bool strides[4])
     for (int i = starts[0]; i != ends[0]; i += inc[0])
         for (int j = starts[1]; j != ends[1]; j += inc[1])
             for (int k = starts[2]; k != ends[2]; k += inc[2])
-                positions[index++] = glm::vec3((float)k-z/2, (float)j-y/2, (float)i-x/2);
+                positions[index++] = glm::vec3((float)(k-z/2)*geometry_scale, (float)(j-y/2)*geometry_scale, (float)(i-x/2)*geometry_scale);
     return positions;
 }
 
@@ -418,12 +418,18 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
     glm::vec3 cam_up;
 
     bool cmdline_file = false;
+    bool camera_file = false;
+    bool use_cylinder = false;
+    int slice_offset = 0;
+    float sh_scale = 1.0;
+    float sh_0_scale = 1.0;
+    float geometry_scale = 1.0;
     std::string filename;
     testWigner();
+    glm::mat4 file_cam;
 
     for (size_t i = 1; i < args.size(); ++i) {
-        if (args[i] == "-camera") {
-            cmdline_camera = true;
+        if (cmdline_camera = args[i] == "-camera") {
             cam_eye.x = std::stof(args[++i]);
             cam_eye.y = std::stof(args[++i]);
             cam_eye.z = std::stof(args[++i]);
@@ -436,10 +442,31 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
             cam_up.y = std::stof(args[++i]);
             cam_up.z = std::stof(args[++i]);
         }
+        if (camera_file = args[i] == "-camera_file") {
+            std::ifstream bin(args[++i]);
+            int in_index = 0;
+            float f;
+            for (int i = 0; i < 4; ++i)
+                for (int j = 0; j < 4; ++j) {
+                    bin.read(reinterpret_cast<char*>(&f), sizeof(float));
+                    file_cam[i][j] = f;
+                }
+
+        }
         if (args[i] == "-file") {
             cmdline_file = true;
             filename = args[++i];
         }
+        if (args[i] == "-use_cylinder")
+            use_cylinder = true;
+        if (args[i] == "-slice_offset")
+            slice_offset = std::stoi(args[++i]);
+        if (args[i] == "-sh_scale")
+            sh_scale = std::stof(args[++i]);
+        if (args[i] == "-sh_0_scale")
+            sh_0_scale = std::stof(args[++i]);
+        if (args[i] == "-geometry_scale")
+            geometry_scale = std::stof(args[++i]);
     }
 
     int x, y, z, sh;
@@ -526,6 +553,8 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
         cam_at = world_center;
     }
     ArcballCamera arcball(cam_eye, cam_at, cam_up);
+    if (camera_file)
+        arcball = ArcballCamera(file_cam);
 
     #if 1
     // cpp::Renderer renderer("sphharm");
@@ -597,9 +626,9 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
 
     std::vector<glm::vec3> positions;
     if (cmdline_file)
-        positions = latVolNodes(x,y,z, strides);
+        positions = latVolNodes(x,y,z, strides, geometry_scale);
     else
-        positions = latVolNodes(2,1,1, strides);
+        positions = latVolNodes(2,1,1, strides, geometry_scale);
 
     if (!cmdline_file)
         coeffs = makeRandomCoeffs(positions.size(), 1);
@@ -617,19 +646,30 @@ void run_app(const std::vector<std::string> &args, SDL_Window *window)
         computeWignerAngles(cam_up, cam_eye, positions, wignerAngles);
         rotatedCoeffs.resize(coeffs.size());
         rotateSH(coeffs, rotatedCoeffs, wignerAngles);
+    }
+    if (use_cylinder) {
         boundRadius.resize(positions.size());
         computeBoundRadius(coeffs, boundRadius);
+    }
+
+    for (int i = 0; i < coeffs.size(); i+=15) {
+        coeffs[i] *= sh_0_scale;
+        for (int j = 0; j < 15; ++j)
+            coeffs[i+j] *= sh_scale;
     }
 
     cpp::Geometry mesh("spherical_harmonics");
     mesh.setParam("glyph.position", cpp::CopiedData(positions));
     mesh.setParam("glyph.coefficients", cpp::CopiedData(coeffs));
     mesh.setParam("glyph.shRenderMethod", (uint)shRenderMethod);
+    mesh.setParam("glyph.useCylinder", use_cylinder);
     if (shRenderMethod == SHRenderMethod::Wigner) {
         mesh.setParam("glyph.rotatedCoefficients", cpp::CopiedData(rotatedCoeffs));
-        mesh.setParam("glyph.boundRadius", cpp::CopiedData(boundRadius));
         mesh.setParam("glyph.camera", camera);
     }
+    if (use_cylinder)
+        mesh.setParam("glyph.boundRadius", cpp::CopiedData(boundRadius));
+
     mesh.commit();
 
     #endif
